@@ -1,0 +1,191 @@
+{% comment %}
+  Product Gallery Pro - Main Gallery Block
+{% endcomment %}
+
+{% schema %}
+{
+  "name": "Product Gallery Pro",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Gallery Layout",
+      "options": [
+        { "value": "carousel", "label": "Carousel (Recommended)" },
+        { "value": "grid", "label": "Grid" },
+        { "value": "stack", "label": "Stack" }
+      ],
+      "default": "carousel"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_thumbnails",
+      "label": "Show thumbnail navigation",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "thumbnail_position",
+      "label": "Thumbnail Position",
+      "options": [
+        { "value": "bottom", "label": "Below main image" },
+        { "value": "left", "label": "Left of main image" }
+      ],
+      "default": "bottom"
+    },
+    {
+      "type": "header",
+      "content": "Zoom"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_zoom",
+      "label": "Enable image zoom",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "zoom_type",
+      "label": "Zoom Type",
+      "options": [
+        { "value": "hover", "label": "Hover to magnify" },
+        { "value": "click", "label": "Click to open lightbox" },
+        { "value": "both", "label": "Both hover and click" }
+      ],
+      "default": "both"
+    },
+    {
+      "type": "range",
+      "id": "zoom_level",
+      "label": "Zoom magnification level",
+      "min": 1.5,
+      "max": 4,
+      "step": 0.5,
+      "default": 2.5,
+      "unit": "x"
+    },
+    {
+      "type": "header",
+      "content": "Behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "variant_filtering",
+      "label": "Filter images by selected variant",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "lazy_loading",
+      "label": "Lazy load images",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "autoplay_video",
+      "label": "Autoplay videos (muted)",
+      "default": false
+    },
+    {
+      "type": "header",
+      "content": "Analytics"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_analytics",
+      "label": "Track gallery interactions",
+      "default": true
+    }
+  ]
+}
+{% endschema %}
+
+<div
+  class="pgp-gallery"
+  data-product-id="{{ product.id }}"
+  data-settings='{{ block.settings | json }}'
+  role="region"
+  aria-label="Product image gallery"
+>
+  <div class="pgp-main-wrapper">
+    <div class="pgp-main" id="pgp-main-slider">
+      {% for media in product.media %}
+        <div
+          class="pgp-slide {% if forloop.first %}pgp-active{% endif %}"
+          data-index="{{ forloop.index0 }}"
+          data-media-id="{{ media.id }}"
+          data-media-type="{{ media.media_type }}"
+          role="group"
+          aria-roledescription="slide"
+          aria-label="{{ forloop.index }} of {{ product.media.size }}"
+        >
+          {% case media.media_type %}
+            {% when 'image' %}
+              <img
+                src="{{ media | image_url: width: 800 }}"
+                alt="{{ media.alt | escape | default: product.title }}"
+                loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
+                class="pgp-image"
+                width="800"
+                height="{{ 800 | divided_by: media.aspect_ratio | round }}"
+              >
+            {% when 'video', 'external_video' %}
+              <div class="pgp-video-wrapper">
+                {% if media.media_type == 'video' %}
+                  {{ media | video_tag: autoplay: false, loop: false, controls: true, muted: true }}
+                {% else %}
+                  {{ media | external_video_tag }}
+                {% endif %}
+              </div>
+          {% endcase %}
+        </div>
+      {% endfor %}
+    </div>
+    {% if product.media.size > 1 %}
+      <button class="pgp-nav pgp-prev" aria-label="Previous image" aria-controls="pgp-main-slider">
+        ‹
+      </button>
+      <button class="pgp-nav pgp-next" aria-label="Next image" aria-controls="pgp-main-slider">
+        ›
+      </button>
+    {% endif %}
+  </div>
+
+  {% if block.settings.show_thumbnails and product.media.size > 1 %}
+    <div
+      class="pgp-thumbnails pgp-thumbnails--{{ block.settings.thumbnail_position }}"
+      role="tablist"
+      aria-label="Image thumbnails"
+    >
+      {% for media in product.media %}
+        <button
+          class="pgp-thumb {% if forloop.first %}pgp-thumb--active{% endif %}"
+          data-index="{{ forloop.index0 }}"
+          role="tab"
+          aria-label="View image {{ forloop.index }}"
+        >
+          <img
+            src="{{ media.preview_image | image_url: width: 100 }}"
+            alt=""
+            loading="lazy"
+            width="100"
+            height="100"
+          >
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<link rel="stylesheet" href="{{ 'gallery.css' | asset_url }}" />
+<script src="{{ 'gallery.js' | asset_url }}" defer></script>
+<script src="{{ 'analytics.js' | asset_url }}" defer></script>
+

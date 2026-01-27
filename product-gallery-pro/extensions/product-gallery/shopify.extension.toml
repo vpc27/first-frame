@@ -1,0 +1,7 @@
+name = "Product Gallery Pro"
+uid = "79b017c2-4586-a0de-c626-a5862241b264f48d8680"
+type = "theme_app_extension"
+
+[extension_points]
+blocks = ["product"]
+

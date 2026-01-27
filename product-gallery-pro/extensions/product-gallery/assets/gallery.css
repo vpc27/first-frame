@@ -1,0 +1,88 @@
+.pgp-gallery {
+  display: grid;
+  gap: 1rem;
+}
+
+.pgp-main-wrapper {
+  position: relative;
+}
+
+.pgp-main {
+  overflow: hidden;
+}
+
+.pgp-slide {
+  display: none;
+}
+
+.pgp-slide.pgp-active {
+  display: block;
+}
+
+.pgp-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.pgp-video-wrapper {
+  position: relative;
+  padding-top: 56.25%;
+}
+
+.pgp-video-wrapper video,
+.pgp-video-wrapper iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pgp-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pgp-prev {
+  left: 0.75rem;
+}
+
+.pgp-next {
+  right: 0.75rem;
+}
+
+.pgp-thumbnails {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pgp-thumbnails--left {
+  flex-direction: column;
+}
+
+.pgp-thumb {
+  border: 1px solid transparent;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pgp-thumb--active {
+  border-color: #008060;
+}
+
+.pgp-thumb img {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  object-fit: cover;
+}
+
