@@ -1,5 +1,6 @@
 {% comment %}
   Product Gallery Pro - Main Gallery Block
+  Reads settings from app metafields (shop.metafields.product_gallery_pro.settings)
 {% endcomment %}
 
 {% schema %}
@@ -9,128 +10,137 @@
   "enabled_on": {
     "templates": ["product"]
   },
-  "settings": [
-    {
-      "type": "header",
-      "content": "Layout"
-    },
-    {
-      "type": "select",
-      "id": "layout",
-      "label": "Gallery Layout",
-      "options": [
-        { "value": "carousel", "label": "Carousel (Recommended)" },
-        { "value": "grid", "label": "Grid" },
-        { "value": "stack", "label": "Stack" }
-      ],
-      "default": "carousel"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_thumbnails",
-      "label": "Show thumbnail navigation",
-      "default": true
-    },
-    {
-      "type": "select",
-      "id": "thumbnail_position",
-      "label": "Thumbnail Position",
-      "options": [
-        { "value": "bottom", "label": "Below main image" },
-        { "value": "left", "label": "Left of main image" }
-      ],
-      "default": "bottom"
-    },
-    {
-      "type": "header",
-      "content": "Zoom"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_zoom",
-      "label": "Enable image zoom",
-      "default": true
-    },
-    {
-      "type": "select",
-      "id": "zoom_type",
-      "label": "Zoom Type",
-      "options": [
-        { "value": "hover", "label": "Hover to magnify" },
-        { "value": "click", "label": "Click to open lightbox" },
-        { "value": "both", "label": "Both hover and click" }
-      ],
-      "default": "both"
-    },
-    {
-      "type": "range",
-      "id": "zoom_level",
-      "label": "Zoom magnification level",
-      "min": 1.5,
-      "max": 4,
-      "step": 0.5,
-      "default": 2.5,
-      "unit": "x"
-    },
-    {
-      "type": "header",
-      "content": "Behavior"
-    },
-    {
-      "type": "checkbox",
-      "id": "variant_filtering",
-      "label": "Filter images by selected variant",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "lazy_loading",
-      "label": "Lazy load images",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "autoplay_video",
-      "label": "Autoplay videos (muted)",
-      "default": false
-    },
-    {
-      "type": "header",
-      "content": "Analytics"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_analytics",
-      "label": "Track gallery interactions",
-      "default": true
-    }
-  ]
+  "settings": []
 }
 {% endschema %}
 
+{% comment %} Read settings from shop metafield (set via app admin) {% endcomment %}
+{% assign pgp_metafield = shop.metafields.product_gallery_pro.settings %}
+{% assign has_app_settings = false %}
+{% assign app_settings = nil %}
+
+{% comment %} Default settings {% endcomment %}
+{% assign layout = "carousel" %}
+{% assign thumbnail_position = "bottom" %}
+{% assign thumbnail_size = "medium" %}
+{% assign enable_zoom = true %}
+{% assign zoom_type = "both" %}
+{% assign zoom_level = 2.5 %}
+{% assign variant_filtering = true %}
+{% assign lazy_loading = true %}
+{% assign autoplay_video = false %}
+{% assign enable_analytics = true %}
+{% assign show_thumbnails = true %}
+
+{% comment %} Parse app settings if metafield exists {% endcomment %}
+{% if pgp_metafield != blank %}
+  {% comment %}
+    For JSON metafields, .value returns the parsed object directly.
+    We access properties using dot notation or bracket notation.
+  {% endcomment %}
+  {% assign app_settings = pgp_metafield.value %}
+
+  {% if app_settings != blank %}
+    {% assign has_app_settings = true %}
+
+    {% comment %} Apply each setting - use default filter for safety {% endcomment %}
+    {% assign layout = app_settings.layout | default: layout %}
+    {% assign thumbnail_position = app_settings.thumbnail_position | default: thumbnail_position %}
+    {% assign thumbnail_size = app_settings.thumbnail_size | default: thumbnail_size %}
+
+    {% comment %} Boolean settings need explicit checks {% endcomment %}
+    {% if app_settings.enable_zoom == true %}
+      {% assign enable_zoom = true %}
+    {% elsif app_settings.enable_zoom == false %}
+      {% assign enable_zoom = false %}
+    {% endif %}
+
+    {% assign zoom_type = app_settings.zoom_type | default: zoom_type %}
+
+    {% if app_settings.zoom_level %}
+      {% assign zoom_level = app_settings.zoom_level %}
+    {% endif %}
+
+    {% if app_settings.variant_filtering == true %}
+      {% assign variant_filtering = true %}
+    {% elsif app_settings.variant_filtering == false %}
+      {% assign variant_filtering = false %}
+    {% endif %}
+
+    {% if app_settings.lazy_loading == true %}
+      {% assign lazy_loading = true %}
+    {% elsif app_settings.lazy_loading == false %}
+      {% assign lazy_loading = false %}
+    {% endif %}
+
+    {% if app_settings.autoplay_video == true %}
+      {% assign autoplay_video = true %}
+    {% elsif app_settings.autoplay_video == false %}
+      {% assign autoplay_video = false %}
+    {% endif %}
+
+    {% if app_settings.enable_analytics == true %}
+      {% assign enable_analytics = true %}
+    {% elsif app_settings.enable_analytics == false %}
+      {% assign enable_analytics = false %}
+    {% endif %}
+
+    {% comment %} Derive show_thumbnails from thumbnail_position {% endcomment %}
+    {% if thumbnail_position == "none" %}
+      {% assign show_thumbnails = false %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{% comment %} Thumbnail size classes {% endcomment %}
+{% assign thumb_width = 60 %}
+{% assign thumb_height = 60 %}
+{% if thumbnail_size == "small" %}
+  {% assign thumb_width = 50 %}
+  {% assign thumb_height = 50 %}
+{% elsif thumbnail_size == "large" %}
+  {% assign thumb_width = 80 %}
+  {% assign thumb_height = 80 %}
+{% endif %}
+
 <div
-  class="pgp-gallery"
+  class="pgp-gallery pgp-layout-{{ layout }}"
   data-product-id="{{ product.id }}"
-  data-settings='{{ block.settings | json }}'
+  data-layout="{{ layout }}"
+  data-show-thumbnails="{{ show_thumbnails }}"
+  data-thumb-position="{{ thumbnail_position }}"
+  data-enable-zoom="{{ enable_zoom }}"
+  data-zoom-type="{{ zoom_type }}"
+  data-zoom-level="{{ zoom_level }}"
+  data-variant-filtering="{{ variant_filtering }}"
+  data-lazy-loading="{{ lazy_loading }}"
+  data-autoplay-video="{{ autoplay_video }}"
+  data-enable-analytics="{{ enable_analytics }}"
   role="region"
   aria-label="Product image gallery"
 >
-  <div class="pgp-main-wrapper">
-    <div class="pgp-main" id="pgp-main-slider">
+  {% if layout == "stack" %}
+    {% comment %} Stack layout - all images visible {% endcomment %}
+    <div class="pgp-stack">
       {% for media in product.media %}
         <div
-          class="pgp-slide {% if forloop.first %}pgp-active{% endif %}"
+          class="pgp-stack-item"
           data-index="{{ forloop.index0 }}"
           data-media-id="{{ media.id }}"
           data-media-type="{{ media.media_type }}"
-          role="group"
-          aria-roledescription="slide"
-          aria-label="{{ forloop.index }} of {{ product.media.size }}"
+          {% if media.media_type == 'image' %}
+            {% for variant in product.variants %}
+              {% if variant.featured_media.id == media.id %}
+                data-variant-id="{{ variant.id }}"
+              {% endif %}
+            {% endfor %}
+          {% endif %}
         >
           {% case media.media_type %}
             {% when 'image' %}
               <img
                 src="{{ media | image_url: width: 800 }}"
+                data-high-res="{{ media | image_url: width: 1600 }}"
                 alt="{{ media.alt | escape | default: product.title }}"
                 loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
                 class="pgp-image"
@@ -140,7 +150,7 @@
             {% when 'video', 'external_video' %}
               <div class="pgp-video-wrapper">
                 {% if media.media_type == 'video' %}
-                  {{ media | video_tag: autoplay: false, loop: false, controls: true, muted: true }}
+                  {{ media | video_tag: autoplay: autoplay_video, loop: false, controls: true, muted: true }}
                 {% else %}
                   {{ media | external_video_tag }}
                 {% endif %}
@@ -149,43 +159,184 @@
         </div>
       {% endfor %}
     </div>
-    {% if product.media.size > 1 %}
-      <button class="pgp-nav pgp-prev" aria-label="Previous image" aria-controls="pgp-main-slider">
-        ‹
-      </button>
-      <button class="pgp-nav pgp-next" aria-label="Next image" aria-controls="pgp-main-slider">
-        ›
-      </button>
-    {% endif %}
-  </div>
 
-  {% if block.settings.show_thumbnails and product.media.size > 1 %}
-    <div
-      class="pgp-thumbnails pgp-thumbnails--{{ block.settings.thumbnail_position }}"
-      role="tablist"
-      aria-label="Image thumbnails"
-    >
+  {% elsif layout == "grid" %}
+    {% comment %} Grid layout - images in a grid {% endcomment %}
+    <div class="pgp-grid">
       {% for media in product.media %}
-        <button
-          class="pgp-thumb {% if forloop.first %}pgp-thumb--active{% endif %}"
+        <div
+          class="pgp-grid-item"
           data-index="{{ forloop.index0 }}"
-          role="tab"
-          aria-label="View image {{ forloop.index }}"
+          data-media-id="{{ media.id }}"
+          data-media-type="{{ media.media_type }}"
         >
-          <img
-            src="{{ media.preview_image | image_url: width: 100 }}"
-            alt=""
-            loading="lazy"
-            width="100"
-            height="100"
-          >
-        </button>
+          {% case media.media_type %}
+            {% when 'image' %}
+              <img
+                src="{{ media | image_url: width: 600 }}"
+                data-high-res="{{ media | image_url: width: 1600 }}"
+                alt="{{ media.alt | escape | default: product.title }}"
+                loading="{% if forloop.index <= 4 %}eager{% else %}lazy{% endif %}"
+                class="pgp-image"
+                width="600"
+                height="{{ 600 | divided_by: media.aspect_ratio | round }}"
+              >
+            {% when 'video', 'external_video' %}
+              <div class="pgp-video-wrapper">
+                {% if media.media_type == 'video' %}
+                  {{ media | video_tag: autoplay: autoplay_video, loop: false, controls: true, muted: true }}
+                {% else %}
+                  {{ media | external_video_tag }}
+                {% endif %}
+              </div>
+          {% endcase %}
+        </div>
       {% endfor %}
     </div>
+
+  {% else %}
+    {% comment %} Carousel layout (default) {% endcomment %}
+    <div class="pgp-main-wrapper">
+      <div class="pgp-main" id="pgp-main-slider">
+        {% for media in product.media %}
+          <div
+            class="pgp-slide {% if forloop.first %}pgp-active{% endif %}"
+            data-index="{{ forloop.index0 }}"
+            data-media-id="{{ media.id }}"
+            data-media-type="{{ media.media_type }}"
+            {% if media.media_type == 'image' %}
+              {% for variant in product.variants %}
+                {% if variant.featured_media.id == media.id %}
+                  data-variant-id="{{ variant.id }}"
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            role="group"
+            aria-roledescription="slide"
+            aria-label="{{ forloop.index }} of {{ product.media.size }}"
+          >
+            {% case media.media_type %}
+              {% when 'image' %}
+                <img
+                  src="{{ media | image_url: width: 800 }}"
+                  data-high-res="{{ media | image_url: width: 1600 }}"
+                  alt="{{ media.alt | escape | default: product.title }}"
+                  loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
+                  class="pgp-image"
+                  width="800"
+                  height="{{ 800 | divided_by: media.aspect_ratio | round }}"
+                >
+              {% when 'video', 'external_video' %}
+                <div class="pgp-video-wrapper">
+                  {% if media.media_type == 'video' %}
+                    {{ media | video_tag: autoplay: autoplay_video, loop: false, controls: true, muted: true }}
+                  {% else %}
+                    {{ media | external_video_tag }}
+                  {% endif %}
+                </div>
+            {% endcase %}
+          </div>
+        {% endfor %}
+      </div>
+      {% if product.media.size > 1 %}
+        <button class="pgp-nav pgp-prev" aria-label="Previous image" aria-controls="pgp-main-slider">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <span class="pgp-counter">1/{{ product.media.size }}</span>
+        <button class="pgp-nav pgp-next" aria-label="Next image" aria-controls="pgp-main-slider">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      {% endif %}
+    </div>
+
+    {% if show_thumbnails and product.media.size > 1 %}
+      <div
+        class="pgp-thumbnails pgp-thumbnails--{{ thumbnail_position }} pgp-thumbnails--{{ thumbnail_size }}"
+        role="tablist"
+        aria-label="Image thumbnails"
+      >
+        {% for media in product.media %}
+          <button
+            class="pgp-thumb {% if forloop.first %}pgp-thumb--active{% endif %}"
+            data-index="{{ forloop.index0 }}"
+            role="tab"
+            aria-label="View image {{ forloop.index }}"
+            aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+          >
+            <img
+              src="{{ media.preview_image | image_url: width: 150 }}"
+              alt=""
+              loading="lazy"
+              width="{{ thumb_width }}"
+              height="{{ thumb_height }}"
+            >
+          </button>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 </div>
 
 <link rel="stylesheet" href="{{ 'gallery.css' | asset_url }}" />
-<script src="{{ 'gallery.js' | asset_url }}" defer></script>
-<script src="{{ 'analytics.js' | asset_url }}" defer></script>
+<script>
+  // Pass metafield value directly to JavaScript for parsing
+  var _pgpMetafieldValue = {{ pgp_metafield.value | json }};
 
+  // Parse settings from metafield if available
+  var _pgpSettings = (function() {
+    var defaults = {
+      layout: "carousel",
+      showThumbnails: true,
+      thumbnailPosition: "bottom",
+      thumbnailSize: "medium",
+      enableZoom: true,
+      zoomType: "both",
+      zoomLevel: 2.5,
+      variantFiltering: true,
+      lazyLoading: true,
+      autoplayVideo: false,
+      enableAnalytics: true
+    };
+
+    if (!_pgpMetafieldValue || typeof _pgpMetafieldValue !== 'object') {
+      console.log('[PGP] No metafield value, using defaults');
+      return defaults;
+    }
+
+    console.log('[PGP] Metafield value found:', _pgpMetafieldValue);
+
+    return {
+      layout: _pgpMetafieldValue.layout || defaults.layout,
+      showThumbnails: _pgpMetafieldValue.thumbnail_position !== "none",
+      thumbnailPosition: _pgpMetafieldValue.thumbnail_position || defaults.thumbnailPosition,
+      thumbnailSize: _pgpMetafieldValue.thumbnail_size || defaults.thumbnailSize,
+      enableZoom: _pgpMetafieldValue.enable_zoom !== undefined ? _pgpMetafieldValue.enable_zoom : defaults.enableZoom,
+      zoomType: _pgpMetafieldValue.zoom_type || defaults.zoomType,
+      zoomLevel: _pgpMetafieldValue.zoom_level || defaults.zoomLevel,
+      variantFiltering: _pgpMetafieldValue.variant_filtering !== undefined ? _pgpMetafieldValue.variant_filtering : defaults.variantFiltering,
+      lazyLoading: _pgpMetafieldValue.lazy_loading !== undefined ? _pgpMetafieldValue.lazy_loading : defaults.lazyLoading,
+      autoplayVideo: _pgpMetafieldValue.autoplay_video !== undefined ? _pgpMetafieldValue.autoplay_video : defaults.autoplayVideo,
+      enableAnalytics: _pgpMetafieldValue.enable_analytics !== undefined ? _pgpMetafieldValue.enable_analytics : defaults.enableAnalytics
+    };
+  })();
+
+  window.PGPConfig = {
+    productId: {{ product.id | json }},
+    settings: _pgpSettings,
+    hasAppSettings: _pgpMetafieldValue && typeof _pgpMetafieldValue === 'object',
+    _rawMetafield: _pgpMetafieldValue
+  };
+
+  console.log('[PGP] Config loaded:', window.PGPConfig);
+</script>
+<script src="{{ 'gallery.js' | asset_url }}" defer></script>
+{% if enable_zoom %}
+  <script src="{{ 'enhancer.js' | asset_url }}" defer></script>
+{% endif %}
+{% if enable_analytics %}
+  <script src="{{ 'analytics.js' | asset_url }}" defer></script>
+{% endif %}

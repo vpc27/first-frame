@@ -4,28 +4,21 @@ import type {
 } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { createShop, getSettings, updateSettings } from "~/lib/dbGallery.server";
+import {
+  getSettingsFromMetafields,
+  updateSettingsInMetafields,
+} from "~/lib/settingsMetafields.server";
 import { logError, logInfo } from "~/lib/logging.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopId = session.shop;
 
   try {
-    // Ensure shop exists in our domain DB (needed for settings foreign key)
     if (!session.shop) {
       throw new Error("Missing shop in session");
     }
-    const accessToken = (session as any).accessToken ?? "";
-    const scope = ((session as any).scope ?? process.env.SCOPES ?? "").toString();
-    if (accessToken) {
-      createShop(shopId, accessToken, scope);
-    } else {
-      // Still create placeholder to satisfy FK constraints in hackathon/dev.
-      createShop(shopId, "dev-access-token", scope || "write_products");
-    }
-
-    const settings = getSettings(shopId);
+    const settings = await getSettingsFromMetafields(admin, shopId);
     return json({ success: true, data: settings });
   } catch (error) {
     logError("api.settings loader failed", error, { shopId });
@@ -41,7 +34,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopId = session.shop;
 
   if (request.method !== "PUT" && request.method !== "POST") {
@@ -49,15 +42,6 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    // Ensure shop exists in our domain DB (needed for settings foreign key)
-    const accessToken = (session as any).accessToken ?? "";
-    const scope = ((session as any).scope ?? process.env.SCOPES ?? "").toString();
-    if (accessToken) {
-      createShop(shopId, accessToken, scope);
-    } else {
-      createShop(shopId, "dev-access-token", scope || "write_products");
-    }
-
     const contentType = request.headers.get("content-type") || "";
     let body: any;
 
@@ -65,18 +49,23 @@ export async function action({ request }: ActionFunctionArgs) {
       body = (await request.json()) as any;
     } else {
       const form = await request.formData();
-      const getValue = (name: string) =>
-        form.get(name) ?? form.get(`${name}[]`);
-      const getBool = (name: string) =>
-        form.has(name) || form.has(`${name}[]`);
+      const getValue = (name: string) => {
+        const val = form.get(name) ?? form.get(`${name}[]`);
+        return typeof val === 'string' ? val : null;
+      };
+      // For booleans, check if value is "true" (not just presence)
+      const getBool = (name: string) => {
+        const val = getValue(name);
+        return val === "true" || val === "on";
+      };
 
       body = {
-        layout: getValue("layout"),
-        thumbnail_position: getValue("thumbnail_position"),
-        thumbnail_size: getValue("thumbnail_size"),
+        layout: getValue("layout") || "carousel",
+        thumbnail_position: getValue("thumbnail_position") || "bottom",
+        thumbnail_size: getValue("thumbnail_size") || "medium",
         enable_zoom: getBool("enable_zoom"),
-        zoom_type: getValue("zoom_type"),
-        zoom_level: Number(getValue("zoom_level") || 2.5),
+        zoom_type: getValue("zoom_type") || "both",
+        zoom_level: Number(getValue("zoom_level")) || 2.5,
         variant_filtering: getBool("variant_filtering"),
         lazy_loading: getBool("lazy_loading"),
         autoplay_video: getBool("autoplay_video"),
@@ -85,9 +74,11 @@ export async function action({ request }: ActionFunctionArgs) {
       };
     }
 
+    logInfo("api.settings parsed body", { shopId, body });
+
     logInfo("api.settings update", { shopId, received: body });
-    updateSettings(shopId, body);
-    const updated = getSettings(shopId);
+    await updateSettingsInMetafields(admin, shopId, body);
+    const updated = await getSettingsFromMetafields(admin, shopId);
     return json({ success: true, data: updated });
   } catch (error) {
     logError("api.settings action failed", error, { shopId });
