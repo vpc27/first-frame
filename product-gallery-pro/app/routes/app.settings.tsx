@@ -17,13 +17,13 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import type { Settings } from "~/types";
-import { getSettings } from "~/lib/dbGallery.server";
+import { getSettingsFromMetafields } from "~/lib/settingsMetafields.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  const settings = getSettings(shopId);
+  const settings = await getSettingsFromMetafields(admin, shopId);
 
   return json({ shopId, settings });
 };
@@ -61,10 +61,22 @@ export default function SettingsPage() {
                   </Banner>
                 )}
                 <fetcher.Form method="post" action="/api/settings">
+                  {/* Hidden inputs for all form values since Polaris components don't create native inputs */}
+                  <input type="hidden" name="layout" value={form.layout} />
+                  <input type="hidden" name="thumbnail_position" value={form.thumbnail_position} />
+                  <input type="hidden" name="thumbnail_size" value={form.thumbnail_size} />
+                  <input type="hidden" name="enable_zoom" value={form.enable_zoom ? "true" : ""} />
+                  <input type="hidden" name="zoom_type" value={form.zoom_type} />
+                  <input type="hidden" name="zoom_level" value={String(form.zoom_level)} />
+                  <input type="hidden" name="variant_filtering" value={form.variant_filtering ? "true" : ""} />
+                  <input type="hidden" name="lazy_loading" value={form.lazy_loading ? "true" : ""} />
+                  <input type="hidden" name="autoplay_video" value={form.autoplay_video ? "true" : ""} />
+                  <input type="hidden" name="enable_analytics" value={form.enable_analytics ? "true" : ""} />
+                  <input type="hidden" name="enable_ai" value={form.enable_ai ? "true" : ""} />
+
                   <BlockStack gap="300">
                     <ChoiceList
                       title="Layout"
-                      name="layout"
                       choices={[
                         { label: "Carousel", value: "carousel" },
                         { label: "Grid", value: "grid" },
