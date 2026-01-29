@@ -33,6 +33,8 @@ export interface Settings {
   enable_analytics: boolean;
   enable_ai: boolean;
 
+  image_fit: "contain" | "cover" | "auto";
+
   created_at?: string;
   updated_at?: string;
 }
@@ -65,5 +67,10 @@ export interface APIResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+export interface OnboardingState {
+  dismissed: boolean;
+  dismissedAt: string | null;
 }
 

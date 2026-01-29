@@ -4,7 +4,7 @@
  * Settings are exposed to storefront via metafield definition.
  */
 
-import type { Settings } from "~/types";
+import type { Settings, OnboardingState } from "~/types";
 
 const NAMESPACE = "product_gallery_pro";
 const KEY = "settings";
@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS = (shopId: string): Settings => ({
   autoplay_video: false,
   enable_analytics: true,
   enable_ai: true,
+  image_fit: "auto",
 });
 
 function parseSettings(shopId: string, value: string | null | undefined): Settings {
@@ -92,6 +93,7 @@ function parseSettings(shopId: string, value: string | null | undefined): Settin
       autoplay_video: Boolean(raw.autoplay_video ?? false),
       enable_analytics: Boolean(raw.enable_analytics ?? true),
       enable_ai: Boolean(raw.enable_ai ?? true),
+      image_fit: (raw.image_fit ?? "auto") as Settings["image_fit"],
     };
   } catch {
     return DEFAULT_SETTINGS(shopId);
@@ -207,6 +209,7 @@ export async function updateSettingsInMetafields(
     autoplay_video: payload.autoplay_video,
     enable_analytics: payload.enable_analytics,
     enable_ai: payload.enable_ai,
+    image_fit: payload.image_fit,
   });
 
   const setResponse = await admin.graphql(METAFIELDS_SET_MUTATION, {
@@ -224,6 +227,78 @@ export async function updateSettingsInMetafields(
   });
   const setJson = (await setResponse.json()) as {
     data?: { metafieldsSet?: { userErrors: Array<{ field: string[]; message: string }> } };
+    errors?: Array<{ message: string }>;
+  };
+  if (setJson.errors?.length) {
+    throw new Error(setJson.errors.map((e) => e.message).join("; "));
+  }
+  const userErrors = setJson.data?.metafieldsSet?.userErrors ?? [];
+  if (userErrors.length > 0) {
+    throw new Error(userErrors.map((e) => e.message).join("; "));
+  }
+}
+
+const ONBOARDING_KEY = "onboarding";
+
+const DEFAULT_ONBOARDING: OnboardingState = {
+  dismissed: false,
+  dismissedAt: null,
+};
+
+export async function getOnboardingState(
+  admin: { graphql: AdminGraphql },
+): Promise<OnboardingState> {
+  const response = await admin.graphql(SHOP_SETTINGS_QUERY, {
+    variables: { namespace: NAMESPACE, key: ONBOARDING_KEY },
+  });
+  const json = (await response.json()) as {
+    data?: { shop?: { metafield?: { value: string } | null } };
+  };
+  const value = json.data?.shop?.metafield?.value;
+  if (!value) return DEFAULT_ONBOARDING;
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    return {
+      dismissed: Boolean(raw.dismissed),
+      dismissedAt: typeof raw.dismissedAt === "string" ? raw.dismissedAt : null,
+    };
+  } catch {
+    return DEFAULT_ONBOARDING;
+  }
+}
+
+export async function dismissOnboarding(
+  admin: { graphql: AdminGraphql },
+): Promise<void> {
+  const shopResponse = await admin.graphql(SHOP_SETTINGS_QUERY, {
+    variables: { namespace: NAMESPACE, key: ONBOARDING_KEY },
+  });
+  const shopJson = (await shopResponse.json()) as {
+    data?: { shop?: { id: string } };
+  };
+  const shopIdGid = shopJson.data?.shop?.id;
+  if (!shopIdGid) throw new Error("Shop ID not found");
+
+  const value = JSON.stringify({
+    dismissed: true,
+    dismissedAt: new Date().toISOString(),
+  });
+
+  const setResponse = await admin.graphql(METAFIELDS_SET_MUTATION, {
+    variables: {
+      metafields: [
+        {
+          ownerId: shopIdGid,
+          namespace: NAMESPACE,
+          key: ONBOARDING_KEY,
+          type: METAFIELD_TYPE,
+          value,
+        },
+      ],
+    },
+  });
+  const setJson = (await setResponse.json()) as {
+    data?: { metafieldsSet?: { userErrors: Array<{ message: string }> } };
     errors?: Array<{ message: string }>;
   };
   if (setJson.errors?.length) {

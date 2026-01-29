@@ -7,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import {
   getSettingsFromMetafields,
   updateSettingsInMetafields,
+  dismissOnboarding,
 } from "~/lib/settingsMetafields.server";
 import { logError, logInfo } from "~/lib/logging.server";
 
@@ -71,7 +72,13 @@ export async function action({ request }: ActionFunctionArgs) {
         autoplay_video: getBool("autoplay_video"),
         enable_analytics: getBool("enable_analytics"),
         enable_ai: getBool("enable_ai"),
+        image_fit: getValue("image_fit") || "auto",
       };
+    }
+
+    if (body.action === "dismiss_onboarding") {
+      await dismissOnboarding(admin);
+      return json({ success: true });
     }
 
     logInfo("api.settings parsed body", { shopId, body });
