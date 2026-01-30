@@ -85,6 +85,7 @@ export function getSettings(shopId: string): Settings {
       autoplay_video: false,
       enable_analytics: true,
       enable_ai: true,
+      image_fit: "auto",
     };
   }
 
@@ -102,6 +103,7 @@ export function getSettings(shopId: string): Settings {
     autoplay_video: Boolean(row.autoplay_video),
     enable_analytics: Boolean(row.enable_analytics),
     enable_ai: Boolean(row.enable_ai),
+    image_fit: (row.image_fit ?? "auto") as Settings["image_fit"],
   } as Settings;
 }
 

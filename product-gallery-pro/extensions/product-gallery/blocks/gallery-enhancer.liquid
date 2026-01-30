@@ -1,0 +1,82 @@
+{% comment %}
+  Product Gallery Pro - Gallery Enhancer
+  Enhances native Shopify/Dawn galleries with zoom functionality
+{% endcomment %}
+
+{% schema %}
+{
+  "name": "PGP Gallery Enhancer",
+  "target": "body",
+  "stylesheet": "enhancer.css",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "Enable gallery enhancements",
+      "default": true
+    }
+  ]
+}
+{% endschema %}
+
+{% if block.settings.enabled %}
+<script>
+(function() {
+  // Default settings
+  var defaults = {
+    layout: "carousel",
+    thumbnail_position: "bottom",
+    thumbnail_size: "medium",
+    enable_zoom: true,
+    zoom_type: "both",
+    zoom_level: 2.5,
+    variant_filtering: true,
+    lazy_loading: true,
+    autoplay_video: false,
+    enable_analytics: true,
+    enable_ai: true
+  };
+
+  // Try to load settings from shop metafield
+  var metafieldSettings = null;
+  {% assign pgp_meta = shop.metafields.product_gallery_pro.settings %}
+  {% if pgp_meta != blank and pgp_meta.value != blank %}
+    {% comment %} Output the raw value - Liquid json filter handles escaping {% endcomment %}
+    var rawValue = {{ pgp_meta.value | json }};
+    if (rawValue) {
+      if (typeof rawValue === 'object') {
+        metafieldSettings = rawValue;
+      } else if (typeof rawValue === 'string') {
+        try {
+          metafieldSettings = JSON.parse(rawValue);
+        } catch(e) {
+          console.warn('[PGP] Could not parse metafield settings:', e.message);
+        }
+      }
+    }
+  {% endif %}
+
+  // Merge defaults with metafield settings
+  var settings = Object.assign({}, defaults, metafieldSettings || {});
+
+  // Merge into existing PGPConfig (gallery.liquid may have already set it
+  // with variant mapping data that must not be overwritten)
+  var existing = window.PGPConfig || {};
+  window.PGPConfig = Object.assign({}, existing, {
+    debug: location.search.includes('pgp_debug'),
+    enabled: true,
+    shop: {{ shop.permanent_domain | json }},
+    settings: Object.assign({}, existing.settings || {}, settings),
+    product: {% if product %}{
+      id: {{ product.id }},
+      handle: {{ product.handle | json }},
+      title: {{ product.title | json }}
+    }{% else %}existing.product || null{% endif %}
+  });
+
+  if (window.PGPConfig.debug) {
+    console.log('[PGP] Config:', window.PGPConfig);
+  }
+})();
+</script>
+{% endif %}

@@ -31,6 +31,7 @@
 {% assign autoplay_video = false %}
 {% assign enable_analytics = true %}
 {% assign show_thumbnails = true %}
+{% assign image_fit = "auto" %}
 
 {% comment %} Parse app settings if metafield exists {% endcomment %}
 {% if pgp_metafield != blank %}
@@ -85,6 +86,8 @@
       {% assign enable_analytics = false %}
     {% endif %}
 
+    {% assign image_fit = app_settings.image_fit | default: image_fit %}
+
     {% comment %} Derive show_thumbnails from thumbnail_position {% endcomment %}
     {% if thumbnail_position == "none" %}
       {% assign show_thumbnails = false %}
@@ -103,6 +106,16 @@
   {% assign thumb_height = 80 %}
 {% endif %}
 
+<style>
+  /* Hide native Dawn gallery immediately to prevent flicker */
+  media-gallery,
+  .product__media-wrapper media-gallery,
+  slider-component.product__media-list {
+    display: none !important;
+    visibility: hidden !important;
+  }
+</style>
+
 <div
   class="pgp-gallery pgp-layout-{{ layout }}"
   data-product-id="{{ product.id }}"
@@ -116,6 +129,7 @@
   data-lazy-loading="{{ lazy_loading }}"
   data-autoplay-video="{{ autoplay_video }}"
   data-enable-analytics="{{ enable_analytics }}"
+  data-image-fit="{{ image_fit }}"
   role="region"
   aria-label="Product image gallery"
 >
@@ -263,6 +277,7 @@
           <button
             class="pgp-thumb {% if forloop.first %}pgp-thumb--active{% endif %}"
             data-index="{{ forloop.index0 }}"
+            data-media-id="{{ media.id }}"
             role="tab"
             aria-label="View image {{ forloop.index }}"
             aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
@@ -299,15 +314,13 @@
       variantFiltering: true,
       lazyLoading: true,
       autoplayVideo: false,
-      enableAnalytics: true
+      enableAnalytics: true,
+      imageFit: "auto"
     };
 
     if (!_pgpMetafieldValue || typeof _pgpMetafieldValue !== 'object') {
-      console.log('[PGP] No metafield value, using defaults');
       return defaults;
     }
-
-    console.log('[PGP] Metafield value found:', _pgpMetafieldValue);
 
     return {
       layout: _pgpMetafieldValue.layout || defaults.layout,
@@ -320,21 +333,170 @@
       variantFiltering: _pgpMetafieldValue.variant_filtering !== undefined ? _pgpMetafieldValue.variant_filtering : defaults.variantFiltering,
       lazyLoading: _pgpMetafieldValue.lazy_loading !== undefined ? _pgpMetafieldValue.lazy_loading : defaults.lazyLoading,
       autoplayVideo: _pgpMetafieldValue.autoplay_video !== undefined ? _pgpMetafieldValue.autoplay_video : defaults.autoplayVideo,
-      enableAnalytics: _pgpMetafieldValue.enable_analytics !== undefined ? _pgpMetafieldValue.enable_analytics : defaults.enableAnalytics
+      enableAnalytics: _pgpMetafieldValue.enable_analytics !== undefined ? _pgpMetafieldValue.enable_analytics : defaults.enableAnalytics,
+      imageFit: _pgpMetafieldValue.image_fit || defaults.imageFit
     };
   })();
 
+  // Variant image mapping from product metafield
+  var _pgpVariantImageMap = {{ product.metafields.product_gallery_pro.variant_image_map.value | json }};
+
+  // Build variant ID -> option values lookup
+  var _pgpVariants = {};
+  {% for variant in product.variants %}
+    _pgpVariants[{{ variant.id | json }}] = [
+      {%- for option in variant.options -%}
+        {{ option | json }}{% unless forloop.last %},{% endunless %}
+      {%- endfor -%}
+    ];
+  {% endfor %}
+
+  // Rules from shop metafield
+  var _pgpRulesData = null;
+  {% assign pgp_rules_meta = shop.metafields.product_gallery_pro.rules %}
+  {% if pgp_rules_meta != blank and pgp_rules_meta.value != blank %}
+    var _pgpRulesRaw = {{ pgp_rules_meta.value | json }};
+    if (_pgpRulesRaw) {
+      if (typeof _pgpRulesRaw === 'object') {
+        _pgpRulesData = _pgpRulesRaw;
+      } else if (typeof _pgpRulesRaw === 'string') {
+        try { _pgpRulesData = JSON.parse(_pgpRulesRaw); } catch(e) {}
+      }
+    }
+  {% endif %}
+
   window.PGPConfig = {
     productId: {{ product.id | json }},
+    defaultVariantId: {{ product.selected_or_first_available_variant.id | json }},
     settings: _pgpSettings,
     hasAppSettings: _pgpMetafieldValue && typeof _pgpMetafieldValue === 'object',
-    _rawMetafield: _pgpMetafieldValue
+    _rawMetafield: _pgpMetafieldValue,
+    variantImageMap: _pgpVariantImageMap || null,
+    variants: _pgpVariants,
+    rulesData: _pgpRulesData
   };
 
-  console.log('[PGP] Config loaded:', window.PGPConfig);
+  // Inject tags and universal flag from variant mapping into slide DOM
+  (function() {
+    var map = window.PGPConfig.variantImageMap;
+    if (!map || !map.mappings) return;
+
+    function numericId(id) {
+      return (typeof id === 'string' && id.indexOf('/') !== -1) ? id.split('/').pop() : String(id);
+    }
+
+    for (var gid in map.mappings) {
+      var m = map.mappings[gid];
+      var nid = numericId(gid);
+      var slide = document.querySelector('.pgp-slide[data-media-id="' + nid + '"]')
+               || document.querySelector('.pgp-stack-item[data-media-id="' + nid + '"]')
+               || document.querySelector('.pgp-grid-item[data-media-id="' + nid + '"]');
+      if (!slide) continue;
+
+      if (m.tags && m.tags.length > 0) {
+        slide.dataset.tags = m.tags.join(',');
+      }
+      if (m.universal) {
+        slide.dataset.universal = 'true';
+      }
+      if (m.variants && m.variants.length > 0) {
+        slide.dataset.variants = m.variants.join(',');
+      }
+    }
+  })();
+
+  // Pre-filter: immediately hide non-matching slides/thumbs to prevent flash.
+  // Does NOT reorder DOM — gallery.js handles ordering via its activeIds array.
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var variantId = params.get('variant') || String(window.PGPConfig.defaultVariantId || '');
+    if (!variantId) return;
+
+    var map = window.PGPConfig.variantImageMap;
+    var variants = window.PGPConfig.variants || {};
+    var optionValues = variants[String(variantId)] || [];
+    if (!map || !map.mappings || optionValues.length === 0) return;
+
+    var mappings = map.mappings;
+    var matchMode = (map.settings && map.settings.match_mode) || 'any';
+
+    function numericId(id) {
+      return (typeof id === 'string' && id.indexOf('/') !== -1) ? id.split('/').pop() : String(id);
+    }
+
+    // Determine allowed media IDs
+    var allowed = {};
+    var bestPos = Infinity; // track which allowed media has lowest position
+    var firstMediaId = null;
+    for (var mid in mappings) {
+      var m = mappings[mid];
+      var nid = numericId(mid);
+      var isAllowed = false;
+
+      if (m.universal) {
+        isAllowed = true;
+      } else {
+        var mv = m.variants || [];
+        if (mv.length > 0) {
+          var hit = matchMode === 'all'
+            ? optionValues.every(function(o) { return mv.indexOf(o) !== -1; })
+            : optionValues.some(function(o) { return mv.indexOf(o) !== -1; });
+          if (hit) isAllowed = true;
+        }
+      }
+
+      if (isAllowed) {
+        allowed[nid] = true;
+        var pos = (typeof m.position === 'number') ? m.position : 9999;
+        if (pos < bestPos) {
+          bestPos = pos;
+          firstMediaId = nid;
+        }
+      }
+    }
+
+    var hasAny = false;
+    for (var k in allowed) { hasAny = true; break; }
+    if (!hasAny) return;
+
+    // Hide non-matching slides, show only the first-by-position as active
+    var matchCount = 0;
+    document.querySelectorAll('.pgp-slide').forEach(function(s) {
+      var mid = s.dataset.mediaId;
+      if (allowed[mid]) {
+        matchCount++;
+        if (mid === firstMediaId) {
+          s.classList.add('pgp-active');
+          s.style.display = 'block';
+        } else {
+          s.classList.remove('pgp-active');
+          s.style.display = 'none';
+        }
+      } else {
+        s.classList.remove('pgp-active');
+        s.style.display = 'none';
+      }
+    });
+
+    // Hide non-matching thumbnails
+    document.querySelectorAll('.pgp-thumb').forEach(function(t) {
+      var mid = t.dataset.mediaId;
+      if (mid) {
+        t.style.display = allowed[mid] ? '' : 'none';
+        t.classList.toggle('pgp-thumb--active', mid === firstMediaId);
+      }
+    });
+
+    // Update counter
+    var ctr = document.querySelector('.pgp-counter');
+    if (ctr) ctr.textContent = '1/' + matchCount;
+  })();
 </script>
+<link rel="stylesheet" href="{{ 'rules-badges.css' | asset_url }}">
+<script src="{{ 'rules-evaluator.js' | asset_url }}" defer></script>
 <script src="{{ 'gallery.js' | asset_url }}" defer></script>
 {% if enable_zoom %}
+  <link rel="stylesheet" href="{{ 'enhancer.css' | asset_url }}">
   <script src="{{ 'enhancer.js' | asset_url }}" defer></script>
 {% endif %}
 {% if enable_analytics %}

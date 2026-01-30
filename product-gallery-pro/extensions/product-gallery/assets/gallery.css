@@ -47,24 +47,71 @@
 
 /* Slides */
 .pgp-slide {
-  display: none;
   width: 100%;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
 }
 
 .pgp-slide.pgp-active {
-  display: block !important;
+  opacity: 1;
+  pointer-events: auto;
+  position: relative;
 }
 
-/* Product Images */
+/* Product Images - responsive sizing via data-image-fit */
 .pgp-image {
   display: block;
   width: 100%;
   height: auto;
   max-width: 100%;
+  object-fit: var(--pgp-image-fit, contain);
+  aspect-ratio: var(--pgp-image-aspect, 1 / 1);
+  background: #f8f9fa;
+}
+
+/* Image fit: auto — natural proportions */
+[data-image-fit="auto"] .pgp-image {
+  object-fit: contain;
+  aspect-ratio: auto;
+}
+
+[data-image-fit="auto"] .pgp-image.pgp-landscape {
+  object-fit: cover;
+}
+
+[data-image-fit="auto"] .pgp-image.pgp-portrait {
+  object-fit: contain;
+}
+
+/* Carousel auto: constrain tall images */
+.pgp-layout-carousel[data-image-fit="auto"] .pgp-image {
+  max-height: 80vh;
+}
+
+/* Image fit: contain — full image in square */
+[data-image-fit="contain"] .pgp-image {
   object-fit: contain;
   aspect-ratio: 1 / 1;
-  background: #f8f9fa;
+}
+
+/* Image fit: cover — fill square, may crop */
+[data-image-fit="cover"] .pgp-image {
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+}
+
+/* Grid always uses uniform sizing regardless of image_fit */
+.pgp-layout-grid .pgp-image {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.pgp-layout-grid .pgp-grid-item:first-child .pgp-image {
+  aspect-ratio: 4 / 3;
 }
 
 /* Video Wrapper */
@@ -272,15 +319,6 @@
   grid-column: span 2;
 }
 
-.pgp-layout-grid .pgp-image {
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-}
-
-.pgp-layout-grid .pgp-grid-item:first-child .pgp-image {
-  aspect-ratio: 4 / 3;
-}
-
 /* Grid on larger screens */
 @media (min-width: 768px) {
   .pgp-layout-grid .pgp-grid {
@@ -365,4 +403,11 @@
 
 .pgp-gallery[data-show-counter="false"] .pgp-counter {
   display: none !important;
+}
+
+/* Focus indicators for keyboard navigation */
+.pgp-nav:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+  opacity: 1;
 }

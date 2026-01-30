@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useLoaderData, useFetcher } from "@remix-run/react";
-import { Page, BlockStack, InlineStack, Button, Banner, List } from "@shopify/polaris";
+import { Link, useLoaderData, useFetcher, useNavigation } from "@remix-run/react";
+import { Page, BlockStack, InlineStack, Button, Banner, List, Card, Layout, SkeletonPage, SkeletonBodyText, SkeletonDisplayText } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -72,12 +72,32 @@ export default function Dashboard() {
   } = useLoaderData<typeof loader>();
 
   const fetcher = useFetcher();
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "loading";
   const shopDomain = shopId;
   const showOnboarding =
     !onboardingState.dismissed &&
     analytics.totalViews === 0 &&
     fetcher.state === "idle" &&
     fetcher.data == null;
+
+  if (isLoading) {
+    return (
+      <Page fullWidth>
+        <TitleBar title="Product Gallery Pro" />
+        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px" }}>
+          <BlockStack gap="600">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
+              {[1,2,3,4].map(i => (
+                <Card key={i}><SkeletonDisplayText size="small" /><SkeletonBodyText lines={2} /></Card>
+              ))}
+            </div>
+            <Card><SkeletonBodyText lines={8} /></Card>
+          </BlockStack>
+        </div>
+      </Page>
+    );
+  }
 
   return (
     <Page fullWidth>

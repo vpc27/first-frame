@@ -1,0 +1,373 @@
+/**
+ * Product Gallery Pro - Badge Styles (PGP-F2.0)
+ *
+ * Styles for badge overlays created by the rules engine.
+ * Supports all 5 positions and 7 style presets.
+ */
+
+/* =============================================================================
+   BADGE CONTAINER
+   ============================================================================= */
+
+.pgp-badge-container {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Position variants */
+.pgp-badge-container--top-left {
+  top: 8px;
+  left: 8px;
+}
+
+.pgp-badge-container--top-right {
+  top: 8px;
+  right: 8px;
+}
+
+.pgp-badge-container--bottom-left {
+  bottom: 8px;
+  left: 8px;
+}
+
+.pgp-badge-container--bottom-right {
+  bottom: 8px;
+  right: 8px;
+}
+
+.pgp-badge-container--center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* =============================================================================
+   BADGE BASE STYLES
+   ============================================================================= */
+
+.pgp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  animation: pgp-badge-appear 0.2s ease-out;
+}
+
+@keyframes pgp-badge-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* =============================================================================
+   BADGE STYLE VARIANTS
+   ============================================================================= */
+
+/* Primary - Brand color */
+.pgp-badge--primary {
+  background-color: #5c6ac4;
+  color: #ffffff;
+}
+
+/* Secondary - Neutral */
+.pgp-badge--secondary {
+  background-color: #6b7280;
+  color: #ffffff;
+}
+
+/* Success - Green */
+.pgp-badge--success {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+/* Warning - Yellow/Orange */
+.pgp-badge--warning {
+  background-color: #f59e0b;
+  color: #000000;
+}
+
+/* Danger - Red */
+.pgp-badge--danger {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+/* Info - Blue */
+.pgp-badge--info {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+/* Custom - Uses inline styles for colors */
+.pgp-badge--custom {
+  /* Colors set via inline style */
+}
+
+/* =============================================================================
+   BADGE ICONS
+   ============================================================================= */
+
+.pgp-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+}
+
+/* Icon before text */
+.pgp-badge-icon--fire::before {
+  content: "🔥";
+}
+
+.pgp-badge-icon--star::before {
+  content: "⭐";
+}
+
+.pgp-badge-icon--clock::before {
+  content: "⏰";
+}
+
+.pgp-badge-icon--tag::before {
+  content: "🏷️";
+}
+
+.pgp-badge-icon--percent::before {
+  content: "%";
+  font-weight: 900;
+}
+
+.pgp-badge-icon--heart::before {
+  content: "❤️";
+}
+
+.pgp-badge-icon--alert::before {
+  content: "⚠️";
+}
+
+.pgp-badge-icon--check::before {
+  content: "✓";
+  font-weight: 900;
+}
+
+/* =============================================================================
+   SPECIAL BADGE TYPES
+   ============================================================================= */
+
+/* Sale badge - enhanced visibility */
+.pgp-badge--sale {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Low stock badge - urgency styling */
+.pgp-badge--low-stock {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #000000;
+  font-weight: 800;
+}
+
+/* New badge */
+.pgp-badge--new {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+}
+
+/* VIP/Exclusive badge */
+.pgp-badge--vip {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #ffffff;
+}
+
+/* Limited edition badge */
+.pgp-badge--limited {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* =============================================================================
+   BADGE SIZE VARIANTS
+   ============================================================================= */
+
+.pgp-badge--small {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+.pgp-badge--large {
+  font-size: 13px;
+  padding: 6px 14px;
+}
+
+/* =============================================================================
+   BADGE ANIMATIONS
+   ============================================================================= */
+
+/* Pulse animation for urgency */
+.pgp-badge--pulse {
+  animation: pgp-badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes pgp-badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Subtle glow for premium */
+.pgp-badge--glow {
+  animation: pgp-badge-glow 2s ease-in-out infinite;
+}
+
+@keyframes pgp-badge-glow {
+  0%, 100% {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(92, 106, 196, 0.4);
+  }
+}
+
+/* =============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================= */
+
+@media (max-width: 767px) {
+  .pgp-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  .pgp-badge-container--top-left,
+  .pgp-badge-container--top-right,
+  .pgp-badge-container--bottom-left,
+  .pgp-badge-container--bottom-right {
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
+    left: 4px;
+  }
+
+  .pgp-badge--large {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+}
+
+/* =============================================================================
+   BADGE STACKING (Multiple badges on same image)
+   ============================================================================= */
+
+.pgp-badge-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pgp-badge-stack--horizontal {
+  flex-direction: row;
+}
+
+/* =============================================================================
+   DARK MODE SUPPORT
+   ============================================================================= */
+
+@media (prefers-color-scheme: dark) {
+  .pgp-badge--secondary {
+    background-color: #4b5563;
+  }
+
+  .pgp-badge--warning {
+    background-color: #fbbf24;
+    color: #000000;
+  }
+}
+
+/* =============================================================================
+   ACCESSIBILITY
+   ============================================================================= */
+
+/* Ensure badges have sufficient contrast */
+.pgp-badge {
+  /* Minimum contrast ratio maintained through color choices */
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .pgp-badge {
+    animation: none;
+  }
+
+  .pgp-badge--pulse,
+  .pgp-badge--glow {
+    animation: none;
+  }
+}
+
+/* =============================================================================
+   INTEGRATION WITH GALLERY LAYOUTS
+   ============================================================================= */
+
+/* Carousel layout */
+.pgp-slide {
+  position: relative;
+}
+
+.pgp-slide .pgp-badge-container {
+  position: absolute;
+}
+
+/* Grid layout */
+.pgp-grid-item {
+  position: relative;
+}
+
+.pgp-grid-item .pgp-badge-container {
+  position: absolute;
+}
+
+/* Stack layout */
+.pgp-stack-item {
+  position: relative;
+}
+
+.pgp-stack-item .pgp-badge-container {
+  position: absolute;
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   ============================================================================= */
+
+/* Hide badge on specific conditions */
+.pgp-badge--hidden {
+  display: none !important;
+}
+
+/* Force badge visibility */
+.pgp-badge--visible {
+  display: inline-flex !important;
+}

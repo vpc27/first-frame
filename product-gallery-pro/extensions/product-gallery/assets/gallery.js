@@ -10,11 +10,94 @@
   var config = window.PGPConfig || {};
   var settings = config.settings || {};
 
-  console.log("[PGP Gallery] Settings loaded:", settings);
-  console.log("[PGP Gallery] Has app settings:", config.hasAppSettings);
-  console.log("[PGP Gallery] Raw metafield:", config._rawMetafield);
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
 
-  // Apply settings to DOM if they differ from Liquid defaults
+  // Normalize GID to numeric string: "gid://shopify/MediaImage/123" -> "123"
+  function numericId(id) {
+    if (typeof id === "string" && id.indexOf("/") !== -1) {
+      return id.split("/").pop();
+    }
+    return String(id);
+  }
+
+  // Build mediaId -> mapping entry lookup (keys are numeric IDs)
+  function getMappingLookup() {
+    var map = config.variantImageMap;
+    if (!map || !map.mappings) return null;
+    var lookup = {};
+    for (var gid in map.mappings) {
+      lookup[numericId(gid)] = map.mappings[gid];
+    }
+    return lookup;
+  }
+
+  // Sort an array of DOM elements by their mapping position
+  function sortByPosition(elements, mappingLookup) {
+    if (!mappingLookup) return elements;
+    return elements.slice().sort(function (a, b) {
+      var mA = mappingLookup[a.dataset.mediaId];
+      var mB = mappingLookup[b.dataset.mediaId];
+      var posA = mA && typeof mA.position === "number" ? mA.position : 9999;
+      var posB = mB && typeof mB.position === "number" ? mB.position : 9999;
+      return posA - posB;
+    });
+  }
+
+  // Resolve which media IDs are allowed for a given variant ID
+  // Returns { allowed: {id: true}, universalOnly: {id: true} } or null
+  function resolveAllowedMedia(variantId) {
+    var map = config.variantImageMap;
+    if (!map || !map.mappings) return null;
+
+    var variantLookup = config.variants || {};
+    var optionValues = variantLookup[String(variantId)] || [];
+    if (optionValues.length === 0) return null;
+
+    var mapSettings = map.settings || {};
+    var matchMode = mapSettings.match_mode || "any";
+
+    var allowed = {};
+    var universalOnly = {};
+
+    for (var gid in map.mappings) {
+      var m = map.mappings[gid];
+      var nid = numericId(gid);
+
+      if (m.universal) {
+        allowed[nid] = true;
+        universalOnly[nid] = true;
+        continue;
+      }
+
+      var mv = m.variants || [];
+      if (mv.length === 0) continue;
+
+      var matched;
+      if (matchMode === "all") {
+        matched = optionValues.every(function (o) {
+          return mv.indexOf(o) !== -1;
+        });
+      } else {
+        matched = optionValues.some(function (o) {
+          return mv.indexOf(o) !== -1;
+        });
+      }
+      if (matched) {
+        allowed[nid] = true;
+      }
+    }
+
+    var hasAny = false;
+    for (var k in allowed) { hasAny = true; break; }
+    return hasAny ? { allowed: allowed, universalOnly: universalOnly } : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // DOM Setup
+  // ---------------------------------------------------------------------------
+
   function applySettingsToDOM(root) {
     if (!config.hasAppSettings) return;
 
@@ -22,16 +105,11 @@
     var currentLayout = root.dataset.layout;
     var targetLayout = s.layout;
 
-    console.log("[PGP Gallery] Current layout:", currentLayout, "Target layout:", targetLayout);
-
-    // If layout needs to change, we need to rebuild the gallery
     if (currentLayout !== targetLayout) {
-      console.log("[PGP Gallery] Layout change needed:", currentLayout, "->", targetLayout);
       root.dataset.layout = targetLayout;
       root.className = root.className.replace(/pgp-layout-\w+/g, "pgp-layout-" + targetLayout);
     }
 
-    // Apply other settings as data attributes
     root.dataset.showThumbnails = s.showThumbnails;
     root.dataset.thumbPosition = s.thumbnailPosition;
     root.dataset.enableZoom = s.enableZoom;
@@ -41,39 +119,25 @@
     root.dataset.lazyLoading = s.lazyLoading;
     root.dataset.autoplayVideo = s.autoplayVideo;
     root.dataset.enableAnalytics = s.enableAnalytics;
+    root.dataset.imageFit = s.imageFit || 'auto';
 
-    // Hide thumbnails if position is "none"
     if (s.thumbnailPosition === "none" || !s.showThumbnails) {
       var thumbs = root.querySelector(".pgp-thumbnails");
       if (thumbs) thumbs.style.display = "none";
     }
   }
 
-  // Replace Dawn/native theme gallery with our gallery
   function replaceNativeGallery() {
     var pgpGallery = document.querySelector(".pgp-gallery");
-    if (!pgpGallery) {
-      console.log("[PGP Gallery] No PGP gallery found");
-      return;
-    }
+    if (!pgpGallery) return;
 
-    // Find Dawn's media-gallery
     var nativeGallery = document.querySelector("media-gallery");
-
     if (nativeGallery && !nativeGallery.contains(pgpGallery) && !pgpGallery.contains(nativeGallery)) {
-      console.log("[PGP Gallery] Found native gallery, replacing...");
-
-      // Insert our gallery right before Dawn's gallery
       nativeGallery.parentNode.insertBefore(pgpGallery, nativeGallery);
-
-      // Hide Dawn's gallery completely
       nativeGallery.style.display = "none";
-
-      console.log("[PGP Gallery] Replaced native gallery");
     }
 
-    // Also hide any slider-component that's a product gallery
-    document.querySelectorAll("slider-component").forEach(function(el) {
+    document.querySelectorAll("slider-component").forEach(function (el) {
       if (!el.contains(pgpGallery) && !pgpGallery.contains(el)) {
         if (el.closest("[data-section-type='product']") || el.closest(".product") || el.closest("section.product")) {
           el.style.display = "none";
@@ -81,133 +145,201 @@
       }
     });
 
-    // Ensure our gallery is visible
     pgpGallery.style.display = "grid";
     pgpGallery.style.visibility = "visible";
     pgpGallery.style.opacity = "1";
   }
 
+  // ---------------------------------------------------------------------------
+  // Carousel
+  // ---------------------------------------------------------------------------
+
   function initCarouselGallery(root) {
-    var allSlides = Array.from(root.querySelectorAll(".pgp-slide"));
+    // Build stable slide/thumb maps keyed by media-id (never changes)
+    var slideByMediaId = {};
+    var thumbByMediaId = {};
+    var allSlideMediaIds = []; // original Liquid order
+
+    Array.from(root.querySelectorAll(".pgp-slide")).forEach(function (el) {
+      var mid = el.dataset.mediaId;
+      slideByMediaId[mid] = el;
+      allSlideMediaIds.push(mid);
+    });
+
     var thumbContainer = root.querySelector(".pgp-thumbnails");
-    var allThumbs = thumbContainer ? Array.from(thumbContainer.querySelectorAll(".pgp-thumb")) : [];
+    if (thumbContainer) {
+      Array.from(thumbContainer.querySelectorAll(".pgp-thumb")).forEach(function (el) {
+        var mid = el.dataset.mediaId;
+        if (mid) thumbByMediaId[mid] = el;
+      });
+    }
+
     var prevBtn = root.querySelector(".pgp-prev");
     var nextBtn = root.querySelector(".pgp-next");
     var counter = root.querySelector(".pgp-counter");
     var mainWrapper = root.querySelector(".pgp-main-wrapper");
+    var mainSlider = root.querySelector("#pgp-main-slider");
 
-    if (!allSlides.length) {
-      console.log("[PGP Gallery] No slides found for carousel");
-      return;
-    }
+    var mappingLookup = getMappingLookup();
 
-    // Active slides (may be filtered by variant)
-    var slides = allSlides;
-    var total = slides.length;
+    if (allSlideMediaIds.length === 0) return;
+
+    // activeIds: the ordered list of media IDs currently visible
+    var activeIds = allSlideMediaIds.slice();
     var current = 0;
 
-    console.log("[PGP Gallery] Carousel initialized:", total, "slides");
-
+    // ---- showSlide ----
     function showSlide(index) {
-      if (slides.length === 0) return;
+      if (activeIds.length === 0) return;
 
-      // Wrap around in both directions
-      current = ((index % slides.length) + slides.length) % slides.length;
+      current = ((index % activeIds.length) + activeIds.length) % activeIds.length;
 
-      // Update all slides visibility
-      allSlides.forEach(function(s) {
-        var isActive = s === slides[current];
-        s.classList.toggle("pgp-active", isActive);
-        s.style.display = isActive ? "block" : "none";
+      var activeMediaId = activeIds[current];
+
+      // Update slide visibility and loading attributes
+      allSlideMediaIds.forEach(function (mid) {
+        var slide = slideByMediaId[mid];
+        var isActive = mid === activeMediaId;
+        slide.classList.toggle("pgp-active", isActive);
+        var img = slide.querySelector("img");
+        if (img) img.loading = isActive ? "eager" : "lazy";
       });
 
-      // Update thumbnails
-      allThumbs.forEach(function(t) {
-        var thumbIndex = parseInt(t.dataset.index, 10);
-        var slideIndex = slides.indexOf(allSlides[thumbIndex]);
-        var isActive = slideIndex === current;
-        t.classList.toggle("pgp-thumb--active", isActive);
-        t.setAttribute("aria-selected", isActive ? "true" : "false");
-      });
+      // Update thumbnail visibility & active state
+      // Reorder thumbs in DOM to match activeIds order
+      if (thumbContainer) {
+        var activeSet = {};
+        activeIds.forEach(function (mid) { activeSet[mid] = true; });
+
+        // First append active thumbs in order, then hide the rest
+        activeIds.forEach(function (mid) {
+          var thumb = thumbByMediaId[mid];
+          if (thumb) {
+            thumbContainer.appendChild(thumb);
+            thumb.style.display = "";
+            thumb.classList.toggle("pgp-thumb--active", mid === activeMediaId);
+            thumb.setAttribute("aria-selected", mid === activeMediaId ? "true" : "false");
+          }
+        });
+
+        // Hide and append non-active thumbs
+        allSlideMediaIds.forEach(function (mid) {
+          if (activeSet[mid]) return;
+          var thumb = thumbByMediaId[mid];
+          if (thumb) {
+            thumbContainer.appendChild(thumb);
+            thumb.style.display = "none";
+            thumb.classList.remove("pgp-thumb--active");
+            thumb.setAttribute("aria-selected", "false");
+          }
+        });
+      }
 
       // Update counter
       if (counter) {
-        counter.textContent = (current + 1) + "/" + slides.length;
+        counter.textContent = (current + 1) + "/" + activeIds.length;
       }
 
-      // Show/hide nav buttons if only one slide
-      if (prevBtn) prevBtn.style.display = slides.length > 1 ? "" : "none";
-      if (nextBtn) nextBtn.style.display = slides.length > 1 ? "" : "none";
-      if (counter) counter.style.display = slides.length > 1 ? "" : "none";
+      // Show/hide nav buttons
+      var multi = activeIds.length > 1;
+      if (prevBtn) prevBtn.style.display = multi ? "" : "none";
+      if (nextBtn) nextBtn.style.display = multi ? "" : "none";
+      if (counter) counter.style.display = multi ? "" : "none";
     }
 
-    // Filter slides by variant
+    // ---- filterByVariant ----
     function filterByVariant(variantId) {
-      if (!settings.variantFiltering) return;
       if (!variantId) {
-        slides = allSlides;
+        // No variant: show all, sorted by position
+        activeIds = sortByPosition(
+          allSlideMediaIds.map(function (mid) { return slideByMediaId[mid]; }),
+          mappingLookup
+        ).map(function (el) { return el.dataset.mediaId; });
       } else {
-        var variantSlide = null;
-        slides = allSlides.filter(function(s) {
-          var slideVariantId = s.dataset.variantId;
-          if (slideVariantId === String(variantId)) {
-            variantSlide = s;
-            return true;
+        var result = resolveAllowedMedia(variantId);
+
+        if (result) {
+          // Custom mapping path
+          var mapSettings = (config.variantImageMap && config.variantImageMap.settings) || {};
+          var fallback = mapSettings.fallback || "show_all";
+
+          var filtered = allSlideMediaIds.filter(function (mid) {
+            return result.allowed[mid];
+          });
+
+          // Fallback if nothing matched
+          if (filtered.length === 0) {
+            if (fallback === "show_all") {
+              filtered = allSlideMediaIds.slice();
+            } else if (fallback === "show_universal") {
+              filtered = allSlideMediaIds.filter(function (mid) {
+                return result.universalOnly[mid];
+              });
+            }
           }
-          return !slideVariantId;
-        });
 
-        if (slides.length === 0) {
-          slides = allSlides;
-        }
+          if (filtered.length === 0) {
+            filtered = allSlideMediaIds.slice();
+          }
 
-        allThumbs.forEach(function(t) {
-          var thumbIndex = parseInt(t.dataset.index, 10);
-          var slideIncluded = slides.includes(allSlides[thumbIndex]);
-          t.style.display = slideIncluded ? "" : "none";
-        });
-
-        if (variantSlide) {
-          current = slides.indexOf(variantSlide);
+          // Sort by mapping position
+          activeIds = sortByPosition(
+            filtered.map(function (mid) { return slideByMediaId[mid]; }),
+            mappingLookup
+          ).map(function (el) { return el.dataset.mediaId; });
         } else {
-          current = 0;
+          // Native fallback: data-variant-id
+          var filtered2 = allSlideMediaIds.filter(function (mid) {
+            var slide = slideByMediaId[mid];
+            var svid = slide.dataset.variantId;
+            if (svid === String(variantId)) return true;
+            return !svid;
+          });
+
+          if (filtered2.length === 0) {
+            filtered2 = allSlideMediaIds.slice();
+          }
+
+          activeIds = filtered2;
         }
       }
 
-      total = slides.length;
-      showSlide(current);
-      console.log("[PGP Gallery] Filtered to", slides.length, "slides for variant", variantId);
+      // Apply rules (badges, limits, filters) — pass all media for cross-variant support
+      activeIds = evaluateAndApplyRules(root, activeIds, allSlideMediaIds);
+
+      current = 0;
+      showSlide(0);
     }
 
-    // Navigation buttons
+    // ---- Event listeners ----
+
     if (prevBtn) {
-      prevBtn.onclick = function(e) {
+      prevBtn.onclick = function (e) {
         e.preventDefault();
         showSlide(current - 1);
       };
     }
     if (nextBtn) {
-      nextBtn.onclick = function(e) {
+      nextBtn.onclick = function (e) {
         e.preventDefault();
         showSlide(current + 1);
       };
     }
 
-    // Thumbnails
-    allThumbs.forEach(function(thumb) {
-      thumb.onclick = function(e) {
+    // Thumbnail clicks — use media-id lookup
+    Object.keys(thumbByMediaId).forEach(function (mid) {
+      thumbByMediaId[mid].onclick = function (e) {
         e.preventDefault();
-        var index = parseInt(thumb.dataset.index, 10);
-        var slideIndex = slides.indexOf(allSlides[index]);
-        if (slideIndex !== -1) {
-          showSlide(slideIndex);
+        var idx = activeIds.indexOf(mid);
+        if (idx !== -1) {
+          showSlide(idx);
         }
       };
     });
 
     // Keyboard navigation
     root.setAttribute("tabindex", "0");
-    root.onkeydown = function(e) {
+    root.onkeydown = function (e) {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         showSlide(current - 1);
@@ -222,13 +354,13 @@
     var swipeTarget = mainWrapper || root;
     var startX = 0, startY = 0, startTime = 0;
 
-    swipeTarget.addEventListener("touchstart", function(e) {
+    swipeTarget.addEventListener("touchstart", function (e) {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       startTime = Date.now();
     }, { passive: true });
 
-    swipeTarget.addEventListener("touchend", function(e) {
+    swipeTarget.addEventListener("touchend", function (e) {
       var endX = e.changedTouches[0].clientX;
       var endY = e.changedTouches[0].clientY;
       var dx = startX - endX;
@@ -236,141 +368,296 @@
       var elapsed = Date.now() - startTime;
 
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) && elapsed < 500) {
-        if (dx > 0) {
-          showSlide(current + 1);
-        } else {
-          showSlide(current - 1);
-        }
+        showSlide(dx > 0 ? current + 1 : current - 1);
       }
     }, { passive: true });
 
-    // Listen for Shopify variant changes
-    if (settings.variantFiltering) {
-      document.addEventListener("variant:changed", function(e) {
-        if (e.detail && e.detail.variant) {
-          filterByVariant(e.detail.variant.id);
-        }
-      });
-
-      document.addEventListener("change", function(e) {
-        if (e.target.matches('input[name="id"], select[name="id"]')) {
-          filterByVariant(e.target.value);
-        }
-      });
-
-      var currentVariant = new URLSearchParams(window.location.search).get("variant");
-      if (currentVariant) {
-        filterByVariant(currentVariant);
+    // Shopify variant change listeners
+    document.addEventListener("variant:changed", function (e) {
+      if (e.detail && e.detail.variant) {
+        filterByVariant(e.detail.variant.id);
       }
+    });
+
+    document.addEventListener("change", function (e) {
+      if (e.target.matches('input[name="id"], select[name="id"]')) {
+        filterByVariant(e.target.value);
+      }
+    });
+
+    // ---- Initial render ----
+    // Determine initial variant: URL param > selected form input > default variant
+    var initVariant = new URLSearchParams(window.location.search).get("variant");
+    if (!initVariant) {
+      var variantInput = document.querySelector('input[name="id"], select[name="id"]');
+      if (variantInput) initVariant = variantInput.value;
+    }
+    if (!initVariant && config.defaultVariantId) {
+      initVariant = String(config.defaultVariantId);
     }
 
-    // Initialize first slide
-    showSlide(0);
+    filterByVariant(initVariant || null);
   }
 
-  function initGallery(root) {
-    // Use settings from parsed metafield, fall back to data attribute, then default
-    var layout = settings.layout || root.dataset.layout || "carousel";
+  // ---------------------------------------------------------------------------
+  // Stack & Grid layout converters
+  // ---------------------------------------------------------------------------
 
-    console.log("[PGP Gallery] Initializing with layout:", layout);
-
-    if (layout === "carousel") {
-      initCarouselGallery(root);
-    } else if (layout === "stack") {
-      // For stack/grid layouts with carousel HTML, convert the DOM
-      convertToStackLayout(root);
-      console.log("[PGP Gallery] Stack layout initialized -", root.querySelectorAll(".pgp-stack-item").length, "items");
-    } else if (layout === "grid") {
-      convertToGridLayout(root);
-      console.log("[PGP Gallery] Grid layout initialized -", root.querySelectorAll(".pgp-grid-item").length, "items");
-    }
-  }
-
-  // Convert carousel HTML to stack layout
   function convertToStackLayout(root) {
     var slides = root.querySelectorAll(".pgp-slide");
     if (!slides.length) return;
 
-    // Create stack container
     var stack = document.createElement("div");
     stack.className = "pgp-stack";
 
-    slides.forEach(function(slide, index) {
+    slides.forEach(function (slide, index) {
       var item = document.createElement("div");
       item.className = "pgp-stack-item";
       item.dataset.index = index;
       item.dataset.mediaId = slide.dataset.mediaId || "";
       item.dataset.mediaType = slide.dataset.mediaType || "image";
 
-      // Move content from slide to stack item
       while (slide.firstChild) {
         item.appendChild(slide.firstChild);
       }
       stack.appendChild(item);
     });
 
-    // Remove carousel elements
     var mainWrapper = root.querySelector(".pgp-main-wrapper");
     var thumbnails = root.querySelector(".pgp-thumbnails");
     if (mainWrapper) mainWrapper.remove();
     if (thumbnails) thumbnails.remove();
 
-    // Add stack
     root.appendChild(stack);
 
-    // Show all images (they were hidden for carousel)
-    stack.querySelectorAll("img").forEach(function(img) {
+    stack.querySelectorAll("img").forEach(function (img) {
       img.style.display = "block";
+    });
+
+    // Apply rules to stack layout
+    var stackIds = Array.from(stack.querySelectorAll('.pgp-stack-item')).map(function(el) { return el.dataset.mediaId; });
+    var filteredIds = evaluateAndApplyRules(root, stackIds);
+    // Hide items not in filteredIds
+    var filteredSet = {};
+    filteredIds.forEach(function(id) { filteredSet[id] = true; });
+    stack.querySelectorAll('.pgp-stack-item').forEach(function(el) {
+      if (!filteredSet[el.dataset.mediaId]) el.style.display = 'none';
     });
   }
 
-  // Convert carousel HTML to grid layout
   function convertToGridLayout(root) {
     var slides = root.querySelectorAll(".pgp-slide");
     if (!slides.length) return;
 
-    // Create grid container
     var grid = document.createElement("div");
     grid.className = "pgp-grid";
 
-    slides.forEach(function(slide, index) {
+    slides.forEach(function (slide, index) {
       var item = document.createElement("div");
       item.className = "pgp-grid-item";
       item.dataset.index = index;
       item.dataset.mediaId = slide.dataset.mediaId || "";
       item.dataset.mediaType = slide.dataset.mediaType || "image";
 
-      // Move content from slide to grid item
       while (slide.firstChild) {
         item.appendChild(slide.firstChild);
       }
       grid.appendChild(item);
     });
 
-    // Remove carousel elements
     var mainWrapper = root.querySelector(".pgp-main-wrapper");
     var thumbnails = root.querySelector(".pgp-thumbnails");
     if (mainWrapper) mainWrapper.remove();
     if (thumbnails) thumbnails.remove();
 
-    // Add grid
     root.appendChild(grid);
 
-    // Show all images (they were hidden for carousel)
-    grid.querySelectorAll("img").forEach(function(img) {
+    grid.querySelectorAll("img").forEach(function (img) {
       img.style.display = "block";
     });
+
+    // Apply rules to grid layout
+    var gridIds = Array.from(grid.querySelectorAll('.pgp-grid-item')).map(function(el) { return el.dataset.mediaId; });
+    var filteredIds = evaluateAndApplyRules(root, gridIds);
+    var filteredSet = {};
+    filteredIds.forEach(function(id) { filteredSet[id] = true; });
+    grid.querySelectorAll('.pgp-grid-item').forEach(function(el) {
+      if (!filteredSet[el.dataset.mediaId]) el.style.display = 'none';
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+
+  function initGallery(root) {
+    var layout = settings.layout || root.dataset.layout || "carousel";
+
+    if (layout === "carousel") {
+      initCarouselGallery(root);
+    } else if (layout === "stack") {
+      convertToStackLayout(root);
+    } else if (layout === "grid") {
+      convertToGridLayout(root);
+    }
+  }
+
+  // Classify images as landscape/portrait for auto image-fit mode
+  function classifyImageAspectRatios(root) {
+    var imageFit = root.dataset.imageFit || 'auto';
+    if (imageFit !== 'auto') return;
+
+    var images = root.querySelectorAll('img.pgp-image');
+    images.forEach(function(img) {
+      function classify() {
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        if (w && h) {
+          if (w >= h) {
+            img.classList.add('pgp-landscape');
+            img.classList.remove('pgp-portrait');
+          } else {
+            img.classList.add('pgp-portrait');
+            img.classList.remove('pgp-landscape');
+          }
+        }
+      }
+      if (img.complete && img.naturalWidth) {
+        classify();
+      } else {
+        img.addEventListener('load', classify);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rules Engine Integration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Evaluate rules against media, supporting cross-variant injection.
+   * @param {Element} root - Gallery root element
+   * @param {string[]} variantFilteredIds - Media IDs after variant filtering
+   * @param {string[]} [allMediaIds] - All media IDs (for cross-variant rules). Optional for non-carousel layouts.
+   * @returns {string[]} - Final visible media IDs after rules
+   */
+  function evaluateAndApplyRules(root, variantFilteredIds, allMediaIds) {
+    var rulesData = config.rulesData;
+    if (!rulesData || !rulesData.rules || rulesData.rules.length === 0) return variantFilteredIds;
+    if (typeof window.PGPRulesEvaluator !== 'function') return variantFilteredIds;
+
+    // Clear all existing badges first (re-evaluation on variant change)
+    root.querySelectorAll('.pgp-badge-container').forEach(function(el) { el.remove(); });
+
+    // Helper: build media item from DOM element
+    function buildMediaItem(mid, idx) {
+      var slide = root.querySelector('.pgp-slide[data-media-id="' + mid + '"]')
+                || root.querySelector('.pgp-stack-item[data-media-id="' + mid + '"]')
+                || root.querySelector('.pgp-grid-item[data-media-id="' + mid + '"]');
+      if (!slide) return null;
+      var img = slide.querySelector('img.pgp-image') || slide.querySelector('img');
+      return {
+        id: mid,
+        type: slide.dataset.mediaType || 'image',
+        src: img ? (img.src || img.currentSrc || '') : '',
+        srcHiRes: img ? (img.dataset.highRes || '') : '',
+        alt: img ? (img.alt || '') : '',
+        position: idx,
+        tags: (slide.dataset.tags || '').split(',').filter(Boolean),
+        variantValues: (slide.dataset.variants || '').split(',').filter(Boolean),
+        universal: slide.dataset.universal === 'true',
+      };
+    }
+
+    // Step 1: Evaluate rules on VARIANT-FILTERED media only
+    // This ensures badge/limit/reorder operate on the correct scope
+    var mediaItems = [];
+    variantFilteredIds.forEach(function(mid, idx) {
+      var item = buildMediaItem(mid, idx);
+      if (item) mediaItems.push(item);
+    });
+
+    if (mediaItems.length === 0) return variantFilteredIds;
+
+    var evaluator = new window.PGPRulesEvaluator({
+      rules: rulesData.rules,
+      globalSettings: rulesData.globalSettings || {},
+      legacyMapping: config.variantImageMap,
+    });
+
+    var context = evaluator.buildContext({ mediaItems: mediaItems });
+    var result = evaluator.evaluate(context);
+    if (!result || !result.media) return variantFilteredIds;
+
+    console.log('[PGP] Rules evaluated:', result.matchedRules.length, 'matched,',
+      result.evaluationTimeMs.toFixed(1) + 'ms');
+
+    // Build visible list from rule evaluation
+    var newVisibleIds = [];
+    var sorted = result.media.slice().sort(function(a, b) { return a.newPosition - b.newPosition; });
+    sorted.forEach(function(item) {
+      if (item.visible) newVisibleIds.push(item.id);
+    });
+
+    // Cascading fallback for filter actions:
+    // If a filter-include rule matched but produced zero visible images for
+    // the current variant's media set, fall back to the variant-filtered
+    // gallery. This prevents pulling in tagged images from other variants.
+    if (newVisibleIds.length === 0 && result.matchedRules.length > 0) {
+      var hadFilterAction = false;
+      result.matchedRules.forEach(function(rule) {
+        (rule.actions || []).forEach(function(action) {
+          if (action.type === 'filter') hadFilterAction = true;
+        });
+      });
+      if (hadFilterAction) {
+        console.log('[PGP] Filter matched 0 images for this variant, falling back to variant gallery');
+        newVisibleIds = variantFilteredIds.slice();
+      }
+    }
+
+    console.log('[PGP] Rules: ' + result.matchedRules.length + ' matched, ' + newVisibleIds.length + ' visible');
+
+    // Render badges on visible slides
+    sorted.forEach(function(item) {
+      if (!item.badges || item.badges.length === 0) return;
+      if (!item.visible) return;
+
+      var slide = root.querySelector('.pgp-slide[data-media-id="' + item.id + '"]')
+                || root.querySelector('.pgp-stack-item[data-media-id="' + item.id + '"]')
+                || root.querySelector('.pgp-grid-item[data-media-id="' + item.id + '"]');
+      if (!slide) return;
+
+      if (getComputedStyle(slide).position === 'static') {
+        slide.style.position = 'relative';
+      }
+
+      item.badges.forEach(function(badge) {
+        var container = document.createElement('div');
+        container.className = 'pgp-badge-container pgp-badge-container--' + (badge.position || 'top-left');
+
+        var badgeEl = document.createElement('span');
+        badgeEl.className = 'pgp-badge pgp-badge--' + (badge.style || 'primary');
+        badgeEl.textContent = badge.text || '';
+
+        if (badge.backgroundColor) badgeEl.style.backgroundColor = badge.backgroundColor;
+        if (badge.textColor) badgeEl.style.color = badge.textColor;
+
+        container.appendChild(badgeEl);
+        slide.appendChild(container);
+      });
+    });
+
+    return newVisibleIds;
   }
 
   function init() {
     var galleries = document.querySelectorAll(".pgp-gallery");
-    console.log("[PGP Gallery] Found", galleries.length, "galleries");
-
     if (galleries.length > 0) {
       replaceNativeGallery();
-      // Apply settings from metafield before initializing
       galleries.forEach(applySettingsToDOM);
       galleries.forEach(initGallery);
+      galleries.forEach(classifyImageAspectRatios);
     }
   }
 
