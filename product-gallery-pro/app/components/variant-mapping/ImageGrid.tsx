@@ -7,12 +7,14 @@
 
 import { colors, borderRadius, spacing, shadows } from "~/styles/design-system";
 import type { ProductMedia, ImageMapping } from "~/types/variant-mapping";
+import { AltTextBadge } from "~/components/alt-text";
 
 interface ImageGridProps {
   media: ProductMedia[];
   mappings: Record<string, ImageMapping>;
   selectedMediaId: string | null;
   onSelectMedia: (mediaId: string) => void;
+  onGenerateAltText?: (mediaId: string) => void;
 }
 
 export function ImageGrid({
@@ -20,6 +22,7 @@ export function ImageGrid({
   mappings,
   selectedMediaId,
   onSelectMedia,
+  onGenerateAltText,
 }: ImageGridProps) {
   if (media.length === 0) {
     return (
@@ -84,6 +87,21 @@ export function ImageGrid({
                 }}
               />
             )}
+
+            {/* Alt text badge */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: spacing[2],
+                left: spacing[2],
+                zIndex: 1,
+              }}
+            >
+              <AltTextBadge
+                altText={item.alt || item.image?.altText || null}
+                onClick={onGenerateAltText ? () => onGenerateAltText(item.id) : undefined}
+              />
+            </div>
 
             {/* Mapping indicator overlay */}
             <div

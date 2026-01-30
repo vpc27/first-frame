@@ -7,17 +7,15 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate, useNavigation } from "@remix-run/react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   Page,
   Card,
   Text,
-  Badge,
   BlockStack,
   InlineStack,
   TextField,
   SkeletonBodyText,
-  SkeletonDisplayText,
   SkeletonThumbnail,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
@@ -40,12 +38,16 @@ const PRODUCTS_WITH_MAPPING_QUERY = `#graphql
         metafield(namespace: "product_gallery_pro", key: "variant_image_map") {
           value
         }
-        media(first: 1) {
+        media(first: 50) {
           nodes {
             ... on MediaImage {
               id
+              alt
             }
           }
+        }
+        mediaCount {
+          count
         }
         totalInventory
       }
@@ -64,7 +66,8 @@ type ProductNode = {
   featuredImage: { url: string } | null;
   variantsCount: { count: number };
   metafield: { value: string } | null;
-  media: { nodes: Array<{ id: string }> };
+  media: { nodes: Array<{ id: string; alt?: string | null }> };
+  mediaCount: { count: number };
   totalInventory: number;
 };
 
@@ -108,6 +111,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // ignore parse errors
       }
     }
+    const totalMedia = p.mediaCount?.count ?? p.media.nodes.length;
+    const missingAltCount = p.media.nodes.filter(
+      (m) => !m.alt || m.alt.trim() === "",
+    ).length;
+
     return {
       id: p.id,
       title: p.title,
@@ -115,6 +123,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       thumbnail: p.featuredImage?.url || null,
       variantCount: p.variantsCount?.count ?? 0,
       mappingStatus,
+      altTextMissing: missingAltCount,
+      altTextTotal: totalMedia,
     };
   });
 
@@ -133,10 +143,15 @@ export default function ProductsPage() {
     return m ? m[1] : encodeURIComponent(id);
   };
 
-  const statusBadge = (status: string) => {
-    if (status === "mapped") return <Badge tone="success">Mapped</Badge>;
-    if (status === "partial") return <Badge tone="attention">Partial</Badge>;
-    return <Badge tone="info">Unmapped</Badge>;
+  const mappingLabel = (status: string) => {
+    if (status === "mapped") return "Images mapped";
+    if (status === "partial") return "Partially mapped";
+    return "Not mapped";
+  };
+
+  const altTextLabel = (missing: number, total: number) => {
+    if (missing === 0) return "Alt text complete";
+    return `${missing}/${total} missing alt text`;
   };
 
   const handleSearch = () => {
@@ -147,108 +162,90 @@ export default function ProductsPage() {
     }
   };
 
+  const handleSearchKeyDown = (e: KeyboardEvent | { key: string }) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
+
   if (isLoading) {
     return (
-      <Page backAction={{ url: "/app" }}>
+      <Page>
         <TitleBar title="Products" />
-        <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "24px" }}>
-          <BlockStack gap="600">
-            <Text as="h1" variant="headingLg">Products</Text>
-            <Card>
-              <BlockStack gap="400">
-                {[1,2,3,4,5].map(i => (
-                  <InlineStack key={i} gap="400" blockAlign="center">
-                    <SkeletonThumbnail size="small" />
-                    <div style={{ flex: 1 }}><SkeletonBodyText lines={1} /></div>
-                  </InlineStack>
-                ))}
-              </BlockStack>
-            </Card>
-          </BlockStack>
-        </div>
+        <BlockStack gap="400">
+          <Card>
+            <BlockStack gap="400">
+              {[1,2,3,4,5].map(i => (
+                <InlineStack key={i} gap="400" blockAlign="center">
+                  <SkeletonThumbnail size="small" />
+                  <div style={{ flex: 1 }}><SkeletonBodyText lines={1} /></div>
+                </InlineStack>
+              ))}
+            </BlockStack>
+          </Card>
+        </BlockStack>
       </Page>
     );
   }
 
   return (
-    <Page backAction={{ url: "/app" }}>
+    <Page>
       <TitleBar title="Products" />
 
-      <div style={{ maxWidth: "1000px", margin: "0 auto", padding: spacing[6] }}>
-        <BlockStack gap="600">
-          <InlineStack align="space-between" blockAlign="center">
-            <Text as="h1" variant="headingLg">
-              Products
-            </Text>
-          </InlineStack>
+      <BlockStack gap="400">
+        {/* Search */}
+        <div style={{ maxWidth: "320px" }} onKeyDown={handleSearchKeyDown}>
+          <TextField
+            label="Search products"
+            labelHidden
+            value={searchValue}
+            onChange={setSearchValue}
+            placeholder="Search by title..."
+            autoComplete="off"
+            clearButton
+            onClearButtonClick={() => { setSearchValue(""); navigate("/app/products"); }}
+            prefix={
+              <span style={{ color: colors.neutral[400] }}>&#128269;</span>
+            }
+          />
+        </div>
 
-          {/* Search */}
-          <div style={{ maxWidth: "400px" }}>
-            <TextField
-              label="Search products"
-              labelHidden
-              value={searchValue}
-              onChange={setSearchValue}
-              placeholder="Search by title..."
-              autoComplete="off"
-              onBlur={handleSearch}
-              connectedRight={
-                <button
-                  onClick={handleSearch}
-                  style={{
-                    padding: `${spacing[2]} ${spacing[3]}`,
-                    background: colors.primary[500],
-                    color: "white",
-                    border: "none",
-                    borderRadius: `0 ${borderRadius.md} ${borderRadius.md} 0`,
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                  }}
-                >
-                  Search
-                </button>
-              }
-            />
-          </div>
-
-          {/* Product list */}
-          {products.length === 0 ? (
-            <Card>
-              <div style={{ padding: spacing[8], textAlign: "center", color: colors.neutral[500] }}>
-                <Text as="p">No products found.</Text>
-              </div>
-            </Card>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
-              {products.map((product) => (
+        {/* Product list */}
+        {products.length === 0 ? (
+          <Card>
+            <div style={{ padding: spacing[6], textAlign: "center", color: colors.neutral[500] }}>
+              <Text as="p">No products found.</Text>
+            </div>
+          </Card>
+        ) : (
+          <Card padding="0">
+            <div>
+              {products.map((product, index) => (
                 <div
                   key={product.id}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: spacing[4],
-                    padding: spacing[4],
-                    background: colors.neutral[0],
-                    border: `1px solid ${colors.neutral[200]}`,
-                    borderRadius: borderRadius.md,
+                    gap: "14px",
+                    padding: "14px 16px",
                     cursor: "pointer",
-                    transition: "border-color 0.15s",
+                    transition: "background 0.1s",
+                    borderBottom: index < products.length - 1 ? `1px solid ${colors.neutral[100]}` : "none",
                   }}
                   onClick={() => navigate(`/app/product-gallery/${productIdForUrl(product.id)}`)}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = colors.primary[300];
+                    e.currentTarget.style.background = colors.neutral[50] || "#f9fafb";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = colors.neutral[200];
+                    e.currentTarget.style.background = "transparent";
                   }}
                 >
                   {/* Thumbnail */}
                   <div
                     style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: borderRadius.sm,
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "8px",
                       overflow: "hidden",
                       background: colors.neutral[100],
                       flexShrink: 0,
@@ -269,7 +266,7 @@ export default function ProductsPage() {
                           alignItems: "center",
                           justifyContent: "center",
                           color: colors.neutral[400],
-                          fontSize: "11px",
+                          fontSize: "10px",
                         }}
                       >
                         No img
@@ -277,11 +274,11 @@ export default function ProductsPage() {
                     )}
                   </div>
 
-                  {/* Info */}
+                  {/* Title + metadata line */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: "14px",
+                        fontSize: "13px",
                         fontWeight: 600,
                         color: colors.neutral[900],
                         overflow: "hidden",
@@ -291,30 +288,32 @@ export default function ProductsPage() {
                     >
                       {product.title}
                     </div>
-                    <div style={{ fontSize: "12px", color: colors.neutral[500], marginTop: "2px" }}>
-                      {product.variantCount} variant{product.variantCount !== 1 ? "s" : ""}
+                    <div style={{ fontSize: "12px", color: colors.neutral[600], marginTop: "2px" }}>
+                      <span>{product.variantCount} variant{product.variantCount !== 1 ? "s" : ""}</span>
+                      <span style={{ margin: "0 6px" }}>·</span>
+                      <span>{mappingLabel(product.mappingStatus)}</span>
+                      <span style={{ margin: "0 6px" }}>·</span>
+                      <span>{altTextLabel(product.altTextMissing, product.altTextTotal)}</span>
                     </div>
                   </div>
 
-                  {/* Status */}
-                  <div>{statusBadge(product.mappingStatus)}</div>
-
                   {/* Actions */}
-                  <InlineStack gap="200">
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/app/product-gallery/${productIdForUrl(product.id)}`);
                       }}
                       style={{
-                        padding: `${spacing[1]} ${spacing[3]}`,
+                        padding: "6px 12px",
                         background: colors.primary[500],
                         color: "white",
                         border: "none",
-                        borderRadius: borderRadius.md,
+                        borderRadius: "6px",
                         fontSize: "12px",
                         fontWeight: 500,
                         cursor: "pointer",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       Edit Images
@@ -322,44 +321,29 @@ export default function ProductsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/app/experience/${productIdForUrl(product.id)}`);
-                      }}
-                      style={{
-                        padding: `${spacing[1]} ${spacing[3]}`,
-                        background: "transparent",
-                        color: colors.primary[600],
-                        border: `1px solid ${colors.primary[300]}`,
-                        borderRadius: borderRadius.md,
-                        fontSize: "12px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Experience
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
                         navigate(`/app/products/${productIdForUrl(product.id)}`);
                       }}
                       style={{
-                        padding: `${spacing[1]} ${spacing[3]}`,
+                        padding: "6px 12px",
                         background: "transparent",
-                        color: colors.neutral[600],
+                        color: colors.neutral[700],
                         border: `1px solid ${colors.neutral[300]}`,
-                        borderRadius: borderRadius.md,
+                        borderRadius: "6px",
                         fontSize: "12px",
+                        fontWeight: 500,
                         cursor: "pointer",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       AI Analysis
                     </button>
-                  </InlineStack>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </BlockStack>
-      </div>
+          </Card>
+        )}
+      </BlockStack>
     </Page>
   );
 }

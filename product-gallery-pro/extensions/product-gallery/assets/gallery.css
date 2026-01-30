@@ -45,20 +45,15 @@
   width: 100%;
 }
 
-/* Slides */
+/* Slides — JS controls visibility via inline display:none / display:"".
+   This is bulletproof against theme CSS specificity issues. */
 .pgp-slide {
   width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
+  display: none;
 }
 
 .pgp-slide.pgp-active {
-  opacity: 1;
-  pointer-events: auto;
+  display: block;
   position: relative;
 }
 

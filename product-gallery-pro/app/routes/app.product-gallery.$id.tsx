@@ -37,6 +37,7 @@ import { getVariantMapping, getShopImageTags, saveShopImageTags } from "~/lib/va
 import { getShopRules } from "~/lib/rules/storage.server";
 import { logError } from "~/lib/logging.server";
 import { AIDetectionModal } from "~/components/variant-mapping";
+import { AltTextBadge, AltTextGeneratorModal, BulkAltTextModal } from "~/components/alt-text";
 import type {
   VariantImageMap,
   ImageMapping,
@@ -50,6 +51,7 @@ import {
   createEmptyMapping,
   createEmptyImageMapping,
   extractVariantOptions,
+  getMediaImageUrl,
 } from "~/types/variant-mapping";
 import { colors, borderRadius, spacing, shadows } from "~/styles/design-system";
 
@@ -222,6 +224,8 @@ function ImageCard({
   onDragEnd,
   onDragOver,
   onDrop,
+  onAltTextClick,
+  altTextOverride,
 }: {
   media: ProductMedia;
   mapping: ImageMapping | undefined;
@@ -235,6 +239,8 @@ function ImageCard({
   onDragEnd?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
+  onAltTextClick?: () => void;
+  altTextOverride?: string | null;
 }) {
   const hasMapping = mapping && (mapping.variants.length > 0 || mapping.universal);
   const variantLabels = mapping?.variants ?? [];
@@ -315,7 +321,7 @@ function ImageCard({
       <div style={{ aspectRatio: "3/4", overflow: "hidden", position: "relative" }}>
         {(() => {
           const isVideo = media.mediaContentType === "VIDEO" || media.mediaContentType === "EXTERNAL_VIDEO";
-          const imgUrl = media.image?.url || media.preview?.image?.url;
+          const imgUrl = getMediaImageUrl(media);
           if (imgUrl) {
             return (
               <>
@@ -370,6 +376,43 @@ function ImageCard({
             </div>
           );
         })()}
+      </div>
+
+      {/* AI source badge */}
+      {mapping?.source === "ai" && mapping.confidence != null && (
+        <div
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: "8px",
+            zIndex: 2,
+            padding: "2px 6px",
+            borderRadius: borderRadius.full,
+            background: colors.primary[500],
+            color: colors.neutral[0],
+            fontSize: "9px",
+            fontWeight: 700,
+            letterSpacing: "0.3px",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          AI {Math.round(mapping.confidence * 100)}%
+        </div>
+      )}
+
+      {/* Alt text badge */}
+      <div
+        style={{
+          position: "absolute",
+          top: mapping?.source === "ai" ? "30px" : "8px",
+          right: mapping?.source === "ai" ? "8px" : "36px",
+          zIndex: 2,
+        }}
+      >
+        <AltTextBadge
+          altText={altTextOverride ?? media.alt ?? media.image?.altText ?? null}
+          onClick={onAltTextClick}
+        />
       </div>
 
       {/* Variant pills footer */}
@@ -466,6 +509,41 @@ export default function VariantMappingPage() {
   const tagFetcher = useFetcher();
   const navigation = useNavigation();
 
+  const [rulesBannerDismissed, setRulesBannerDismissed] = useState(false);
+  const [newTagInput, setNewTagInput] = useState("");
+  const [showTagInput, setShowTagInput] = useState(false);
+
+  // Merge fetcher-returned tags with loader tags
+  const currentShopTags: string[] = (tagFetcher.data as { shopTags?: string[] })?.shopTags ?? shopTags ?? [];
+
+  // Core state
+  const [mapping, setMapping] = useState<VariantImageMap>(
+    initialMapping ?? createEmptyMapping()
+  );
+  const [originalMapping] = useState<VariantImageMap | null>(initialMapping);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [dragMediaId, setDragMediaId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [altTextModalImage, setAltTextModalImage] = useState<{
+    id: string;
+    url: string;
+    currentAltText: string | null;
+  } | null>(null);
+  const [isBulkAltTextOpen, setIsBulkAltTextOpen] = useState(false);
+  const [mediaAltTexts, setMediaAltTexts] = useState<Record<string, string>>({});
+  const [aiApplyCount, setAiApplyCount] = useState<number | null>(null);
+
+  // Computed
+  const variantOptions = useMemo(
+    () => extractVariantOptions(product.variants),
+    [product.variants]
+  );
+
   if (navigation.state === "loading") {
     return (
       <Page title="Loading...">
@@ -493,33 +571,6 @@ export default function VariantMappingPage() {
       </Page>
     );
   }
-
-  const [rulesBannerDismissed, setRulesBannerDismissed] = useState(false);
-  const [newTagInput, setNewTagInput] = useState("");
-  const [showTagInput, setShowTagInput] = useState(false);
-
-  // Merge fetcher-returned tags with loader tags
-  const currentShopTags: string[] = (tagFetcher.data as { shopTags?: string[] })?.shopTags ?? shopTags ?? [];
-
-  // Core state
-  const [mapping, setMapping] = useState<VariantImageMap>(
-    initialMapping ?? createEmptyMapping()
-  );
-  const [originalMapping] = useState<VariantImageMap | null>(initialMapping);
-  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [dragMediaId, setDragMediaId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-
-  // Computed
-  const variantOptions = useMemo(
-    () => extractVariantOptions(product.variants),
-    [product.variants]
-  );
   const isDirty =
     JSON.stringify(mapping) !==
     JSON.stringify(originalMapping ?? createEmptyMapping());
@@ -757,21 +808,20 @@ export default function VariantMappingPage() {
   }, []);
 
   const handleApplyAIResults = useCallback((results: AIDetectionResult[]) => {
+    const applied = results.filter((r) => r.detectedVariants.length > 0);
     setMapping((prev) => {
       const newMappings = { ...prev.mappings };
 
-      for (const result of results) {
-        if (result.detectedVariants.length > 0) {
-          const existing =
-            newMappings[result.mediaId] ?? createEmptyImageMapping("ai");
-          newMappings[result.mediaId] = {
-            ...existing,
-            variants: result.detectedVariants,
-            source: "ai",
-            confidence: result.confidence,
-            mapped_at: new Date().toISOString(),
-          };
-        }
+      for (const result of applied) {
+        const existing =
+          newMappings[result.mediaId] ?? createEmptyImageMapping("ai");
+        newMappings[result.mediaId] = {
+          ...existing,
+          variants: result.detectedVariants,
+          source: "ai",
+          confidence: result.confidence,
+          mapped_at: new Date().toISOString(),
+        };
       }
 
       return {
@@ -781,6 +831,7 @@ export default function VariantMappingPage() {
         mappings: newMappings,
       };
     });
+    setAiApplyCount(applied.length);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -879,6 +930,10 @@ export default function VariantMappingPage() {
           content: "AI Auto-Detect",
           onAction: () => setIsAIModalOpen(true),
         },
+        {
+          content: "AI Alt Text",
+          onAction: () => setIsBulkAltTextOpen(true),
+        },
       ]}
     >
       <TitleBar title="Image Mapping" />
@@ -904,6 +959,16 @@ export default function VariantMappingPage() {
               Variant image mapping has been saved. Changes will appear on the
               storefront.
             </p>
+          </Banner>
+        )}
+
+        {aiApplyCount !== null && (
+          <Banner
+            tone="success"
+            title={`AI assigned variants to ${aiApplyCount} image${aiApplyCount !== 1 ? "s" : ""}`}
+            onDismiss={() => setAiApplyCount(null)}
+          >
+            <p>Review the assignments and save when ready.</p>
           </Banner>
         )}
 
@@ -1075,6 +1140,17 @@ export default function VariantMappingPage() {
                           e.preventDefault();
                           setDragOverId(null);
                           handleDrop(media.id);
+                        }}
+                        altTextOverride={mediaAltTexts[media.id] ?? null}
+                        onAltTextClick={() => {
+                          const imgUrl = getMediaImageUrl(media);
+                          if (imgUrl) {
+                            setAltTextModalImage({
+                              id: media.id,
+                              url: imgUrl,
+                              currentAltText: mediaAltTexts[media.id] ?? media.alt ?? media.image?.altText ?? null,
+                            });
+                          }
                         }}
                       />
                     ))}
@@ -1525,6 +1601,53 @@ export default function VariantMappingPage() {
         onApply={handleApplyAIResults}
         media={product.media}
         productId={product.id}
+        selectedMediaIds={Array.from(selectedMediaIds)}
+      />
+
+      {/* Single Alt Text Generator Modal */}
+      {altTextModalImage && (
+        <AltTextGeneratorModal
+          open={!!altTextModalImage}
+          onClose={() => setAltTextModalImage(null)}
+          image={altTextModalImage}
+          productContext={{
+            title: product.title,
+            type: product.productType ?? undefined,
+            vendor: product.vendor,
+            productId: product.id,
+          }}
+          onSaved={(mediaId, altText) => {
+            setMediaAltTexts((prev) => ({ ...prev, [mediaId]: altText }));
+          }}
+        />
+      )}
+
+      {/* Bulk Alt Text Modal */}
+      <BulkAltTextModal
+        open={isBulkAltTextOpen}
+        onClose={() => setIsBulkAltTextOpen(false)}
+        images={product.media
+          .filter((m) => getMediaImageUrl(m) != null)
+          .map((m) => ({
+            id: m.id,
+            url: getMediaImageUrl(m)!,
+            currentAltText: mediaAltTexts[m.id] ?? m.alt ?? m.image?.altText ?? m.preview?.image?.altText ?? null,
+          }))}
+        productContext={{
+          title: product.title,
+          type: product.productType ?? undefined,
+          vendor: product.vendor,
+          productId: product.id,
+        }}
+        onSaved={(updates) => {
+          setMediaAltTexts((prev) => {
+            const next = { ...prev };
+            for (const u of updates) {
+              next[u.mediaId] = u.altText;
+            }
+            return next;
+          });
+        }}
       />
     </Page>
   );

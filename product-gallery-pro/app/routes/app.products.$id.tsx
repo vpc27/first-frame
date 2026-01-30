@@ -11,6 +11,7 @@ import {
   Link,
 } from "@remix-run/react";
 import { useState, useCallback } from "react";
+import { getMediaImageUrl } from "~/types/variant-mapping";
 import {
   Page,
   Layout,
@@ -370,8 +371,8 @@ export default function ProductAiPage() {
   }
 
   const mediaNodes = (product.media?.nodes ?? []).filter(
-    (n): n is MediaNode & { image: { url: string } } =>
-      n != null && "id" in n && n.image?.url != null,
+    (n): n is MediaNode & { id: string } =>
+      n != null && "id" in n && (n.image?.url != null || n.preview?.image?.url != null),
   );
   const isSubmitting = navigation.state === "submitting";
 
@@ -431,8 +432,8 @@ export default function ProductAiPage() {
                 </Card>
               ) : (
                 mediaNodes.map((media) => {
-                  const url = media.image?.url ?? "";
-                  const currentAlt = media.alt ?? media.image?.altText ?? "";
+                  const url = media.image?.url ?? media.preview?.image?.url ?? "";
+                  const currentAlt = media.alt ?? media.image?.altText ?? media.preview?.image?.altText ?? "";
                   const altResult = aiAlt[media.id];
                   const qualityResult = aiQuality[media.id];
                   const loadingAlt = analyzing[media.id] === "alt";
@@ -596,11 +597,12 @@ export default function ProductAiPage() {
                           )
                         : "\u2014";
 
+                      const thumbUrl = media.image?.url ?? media.preview?.image?.url;
                       return [
-                        media.image?.url ? (
+                        thumbUrl ? (
                           <Thumbnail
                             key={media.id}
-                            source={media.image.url}
+                            source={thumbUrl}
                             alt={media.alt ?? ""}
                             size="small"
                           />

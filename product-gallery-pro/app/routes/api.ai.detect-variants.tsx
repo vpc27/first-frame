@@ -29,7 +29,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       success: true,
       data: {
         available: isAvailable,
-        model: "llava",
+        model: "llava + claude-fallback",
       },
     });
   } catch (error) {

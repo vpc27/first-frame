@@ -459,7 +459,27 @@
     for (var k in allowed) { hasAny = true; break; }
     if (!hasAny) return;
 
-    // Hide non-matching slides, show only the first-by-position as active
+    // Ensure the first-by-position image loads immediately.
+    // Liquid sets eager on product.media[0], which may differ from the variant's first image.
+    // removeAttribute('loading') lifts the lazy constraint so the browser re-evaluates.
+    // <link rel="preload"> ensures highest-priority fetch regardless of preload scanner state.
+    if (firstMediaId) {
+      var firstSlide = document.querySelector('.pgp-slide[data-media-id="' + firstMediaId + '"]');
+      if (firstSlide) {
+        var img = firstSlide.querySelector('img');
+        if (img) {
+          img.removeAttribute('loading');
+          var link = document.createElement('link');
+          link.rel = 'preload';
+          link.as = 'image';
+          link.href = img.src;
+          document.head.appendChild(link);
+        }
+      }
+    }
+
+    // Show only the first-by-position slide as active; CSS hides the rest
+    // via .pgp-slide { display: none } / .pgp-slide.pgp-active { display: block }.
     var matchCount = 0;
     document.querySelectorAll('.pgp-slide').forEach(function(s) {
       var mid = s.dataset.mediaId;
@@ -467,14 +487,11 @@
         matchCount++;
         if (mid === firstMediaId) {
           s.classList.add('pgp-active');
-          s.style.display = 'block';
         } else {
           s.classList.remove('pgp-active');
-          s.style.display = 'none';
         }
       } else {
         s.classList.remove('pgp-active');
-        s.style.display = 'none';
       }
     });
 

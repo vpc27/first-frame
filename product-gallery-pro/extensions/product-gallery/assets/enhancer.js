@@ -458,7 +458,12 @@
     var parent = img.closest('.pgp-slide') || img.closest('.pgp-stack-item') || img.closest('.pgp-grid-item') || img.closest('.product__media-item') || img.parentElement;
     if (!parent) return;
 
-    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    // Only set position:relative on non-slide parents (stack/grid items, etc).
+    // Carousel .pgp-slide elements use absolute/relative positioning via CSS
+    // classes, and inline position would break the carousel layout.
+    if (!parent.classList.contains('pgp-slide') && getComputedStyle(parent).position === 'static') {
+      parent.style.position = 'relative';
+    }
 
     if (enableMagnifier && !isTouch) {
       img.classList.add('pgp-zoom-cursor');

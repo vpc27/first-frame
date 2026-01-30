@@ -144,8 +144,8 @@ export default function Dashboard() {
               <Link to="/app/settings">
                 <Button>Settings</Button>
               </Link>
-              <Link to="/app/ai-insights">
-                <Button variant="primary">AI Insights</Button>
+              <Link to="/app/ai-tools">
+                <Button variant="primary">AI Tools</Button>
               </Link>
             </InlineStack>
           </div>
@@ -430,7 +430,7 @@ export default function Dashboard() {
                     >
                       AI Features
                     </h3>
-                    <Link to="/app/ai-insights">
+                    <Link to="/app/ai-tools">
                       <button
                         style={{
                           background: "none",
