@@ -264,6 +264,22 @@ export const DEFAULT_MAPPING_SETTINGS: MappingSettings = {
 };
 
 /**
+ * Resolve the best available image URL for any media type.
+ * For images: uses media.image.url
+ * For videos/3D models: falls back to media.preview.image.url (thumbnail)
+ */
+export function getMediaImageUrl(media: ProductMedia): string | null {
+  return media.image?.url ?? media.preview?.image?.url ?? null;
+}
+
+/**
+ * Resolve the best available alt text for any media type.
+ */
+export function getMediaAltText(media: ProductMedia): string | null {
+  return media.alt ?? media.image?.altText ?? media.preview?.image?.altText ?? null;
+}
+
+/**
  * Create an empty mapping structure
  */
 export function createEmptyMapping(): VariantImageMap {

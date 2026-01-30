@@ -6,6 +6,9 @@ type AppConfig = {
     host: string;
     model: string;
   };
+  anthropic: {
+    apiKey: string | null;
+  };
   env: "development" | "production" | "test";
   port: number;
 };
@@ -19,6 +22,7 @@ function getConfig(): AppConfig {
   const ollamaModel = process.env.OLLAMA_MODEL ?? "llava:7b";
 
   const port = Number(process.env.PORT ?? "3000");
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;
 
   return {
     database: {
@@ -28,10 +32,12 @@ function getConfig(): AppConfig {
       host: ollamaHost,
       model: ollamaModel,
     },
+    anthropic: {
+      apiKey: anthropicApiKey,
+    },
     env,
     port,
   };
 }
 
 export const config: AppConfig = getConfig();
-

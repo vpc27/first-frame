@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { colors, borderRadius, spacing, shadows } from "~/styles/design-system";
+import { getMediaImageUrl } from "~/types/variant-mapping";
 import type { AIDetectionResult, ProductMedia } from "~/types/variant-mapping";
 
 interface AIDetectionModalProps {
@@ -15,6 +16,7 @@ interface AIDetectionModalProps {
   onApply: (results: AIDetectionResult[]) => void;
   media: ProductMedia[];
   productId: string;
+  selectedMediaIds?: string[];
 }
 
 type DetectionState = "idle" | "detecting" | "complete" | "error";
@@ -25,28 +27,38 @@ export function AIDetectionModal({
   onApply,
   media,
   productId,
+  selectedMediaIds = [],
 }: AIDetectionModalProps) {
   const [state, setState] = useState<DetectionState>("idle");
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [results, setResults] = useState<AIDetectionResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedResults, setSelectedResults] = useState<Set<string>>(
     new Set()
   );
+  const [scope, setScope] = useState<"all" | "selected">(
+    selectedMediaIds.length > 0 ? "selected" : "all"
+  );
 
   if (!isOpen) return null;
 
+  const scopeMedia = scope === "selected" && selectedMediaIds.length > 0
+    ? media.filter((m) => selectedMediaIds.includes(m.id))
+    : media;
+
   const handleStartDetection = async () => {
     setState("detecting");
-    setProgress({ current: 0, total: media.length });
     setError(null);
     setResults([]);
 
     try {
+      const body: Record<string, unknown> = { productId };
+      if (scope === "selected" && selectedMediaIds.length > 0) {
+        body.mediaIds = selectedMediaIds;
+      }
       const response = await fetch("/api/ai/detect-variants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -105,7 +117,8 @@ export function AIDetectionModal({
   };
 
   const getMediaImage = (mediaId: string) => {
-    return media.find((m) => m.id === mediaId)?.image?.url;
+    const m = media.find((item) => item.id === mediaId);
+    return m ? getMediaImageUrl(m) : null;
   };
 
   return (
@@ -218,31 +231,79 @@ export function AIDetectionModal({
               </h3>
               <p
                 style={{
-                  margin: `0 0 ${spacing[6]}`,
+                  margin: `0 0 ${spacing[4]}`,
                   color: colors.neutral[600],
                   fontSize: "14px",
                 }}
               >
-                AI will analyze {media.length} image
-                {media.length !== 1 ? "s" : ""} and suggest variant assignments
+                AI will analyze images and suggest variant assignments
                 based on visual content and filenames.
               </p>
-              <button
-                type="button"
-                onClick={handleStartDetection}
-                style={{
-                  padding: `${spacing[3]} ${spacing[6]}`,
-                  background: colors.primary[500],
-                  color: colors.neutral[0],
-                  border: "none",
-                  borderRadius: borderRadius.md,
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Start Detection
-              </button>
+
+              {/* Scope selector */}
+              {selectedMediaIds.length > 0 && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    gap: 0,
+                    marginBottom: spacing[6],
+                    borderRadius: borderRadius.md,
+                    overflow: "hidden",
+                    border: `1px solid ${colors.neutral[300]}`,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setScope("all")}
+                    style={{
+                      padding: `${spacing[2]} ${spacing[4]}`,
+                      background: scope === "all" ? colors.primary[500] : colors.neutral[0],
+                      color: scope === "all" ? colors.neutral[0] : colors.neutral[700],
+                      border: "none",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    All images ({media.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScope("selected")}
+                    style={{
+                      padding: `${spacing[2]} ${spacing[4]}`,
+                      background: scope === "selected" ? colors.primary[500] : colors.neutral[0],
+                      color: scope === "selected" ? colors.neutral[0] : colors.neutral[700],
+                      border: "none",
+                      borderLeft: `1px solid ${colors.neutral[300]}`,
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Selected ({selectedMediaIds.length})
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleStartDetection}
+                  style={{
+                    padding: `${spacing[3]} ${spacing[6]}`,
+                    background: colors.primary[500],
+                    color: colors.neutral[0],
+                    border: "none",
+                    borderRadius: borderRadius.md,
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Start Detection ({scopeMedia.length} image{scopeMedia.length !== 1 ? "s" : ""})
+                </button>
+              </div>
             </div>
           )}
 
@@ -260,7 +321,8 @@ export function AIDetectionModal({
                 }}
               />
               <style>
-                {`@keyframes spin { to { transform: rotate(360deg); } }`}
+                {`@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-bar { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }`}
               </style>
               <h3
                 style={{
@@ -268,7 +330,7 @@ export function AIDetectionModal({
                   color: colors.neutral[800],
                 }}
               >
-                Analyzing Images...
+                Analyzing {scopeMedia.length} image{scopeMedia.length !== 1 ? "s" : ""}...
               </h3>
               <p
                 style={{
@@ -277,7 +339,7 @@ export function AIDetectionModal({
                   fontSize: "14px",
                 }}
               >
-                Processing {progress.current} of {progress.total} images
+                This may take a moment
               </p>
               <div
                 style={{
@@ -291,10 +353,10 @@ export function AIDetectionModal({
               >
                 <div
                   style={{
-                    width: `${(progress.current / progress.total) * 100}%`,
+                    width: "100%",
                     height: "100%",
                     background: colors.primary[500],
-                    transition: "width 0.3s ease",
+                    animation: "pulse-bar 1.5s ease-in-out infinite",
                   }}
                 />
               </div>

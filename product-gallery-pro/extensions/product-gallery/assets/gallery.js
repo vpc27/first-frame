@@ -196,13 +196,43 @@
 
       var activeMediaId = activeIds[current];
 
-      // Update slide visibility and loading attributes
+      // Determine adjacent (prev/next) IDs for preloading
+      var prevId = activeIds.length > 1 ? activeIds[(current - 1 + activeIds.length) % activeIds.length] : null;
+      var nextId = activeIds.length > 1 ? activeIds[(current + 1) % activeIds.length] : null;
+
+      // Update slide visibility via inline styles (bulletproof against theme CSS)
       allSlideMediaIds.forEach(function (mid) {
         var slide = slideByMediaId[mid];
         var isActive = mid === activeMediaId;
         slide.classList.toggle("pgp-active", isActive);
-        var img = slide.querySelector("img");
-        if (img) img.loading = isActive ? "eager" : "lazy";
+        if (isActive) {
+          slide.style.display = "";
+          slide.style.position = "";
+          // Force-load the active image if it hasn't been fetched yet.
+          // removeAttribute('loading') lifts the lazy constraint so the
+          // browser re-evaluates and loads the now-visible image.
+          var img = slide.querySelector("img");
+          if (img && img.hasAttribute("loading")) {
+            img.removeAttribute("loading");
+          }
+        } else {
+          slide.style.display = "none";
+          slide.style.position = "";
+        }
+      });
+
+      // Preload adjacent slides into browser cache for smooth next/prev navigation.
+      // Remove lazy constraint so browser won't block future loads, and use
+      // new Image() to warm the HTTP cache (since display:none slides won't trigger fetch).
+      [prevId, nextId].forEach(function (mid) {
+        if (!mid) return;
+        var slide = slideByMediaId[mid];
+        var img = slide && slide.querySelector("img");
+        if (img && !img.complete) {
+          if (img.hasAttribute("loading")) img.removeAttribute("loading");
+          var preload = new Image();
+          preload.src = img.src;
+        }
       });
 
       // Update thumbnail visibility & active state
@@ -305,7 +335,7 @@
       }
 
       // Apply rules (badges, limits, filters) — pass all media for cross-variant support
-      activeIds = evaluateAndApplyRules(root, activeIds, allSlideMediaIds);
+      activeIds = evaluateAndApplyRules(root, activeIds, allSlideMediaIds, variantId);
 
       current = 0;
       showSlide(0);
@@ -541,7 +571,7 @@
    * @param {string[]} [allMediaIds] - All media IDs (for cross-variant rules). Optional for non-carousel layouts.
    * @returns {string[]} - Final visible media IDs after rules
    */
-  function evaluateAndApplyRules(root, variantFilteredIds, allMediaIds) {
+  function evaluateAndApplyRules(root, variantFilteredIds, allMediaIds, currentVariantId) {
     var rulesData = config.rulesData;
     if (!rulesData || !rulesData.rules || rulesData.rules.length === 0) return variantFilteredIds;
     if (typeof window.PGPRulesEvaluator !== 'function') return variantFilteredIds;
@@ -585,12 +615,16 @@
       legacyMapping: config.variantImageMap,
     });
 
-    var context = evaluator.buildContext({ mediaItems: mediaItems });
+    var variantLookup = config.variants || {};
+    var optionValues = currentVariantId ? (variantLookup[String(currentVariantId)] || []) : [];
+    var context = evaluator.buildContext({
+      mediaItems: mediaItems,
+      variantId: currentVariantId,
+      selectedValues: optionValues,
+    });
     var result = evaluator.evaluate(context);
     if (!result || !result.media) return variantFilteredIds;
 
-    console.log('[PGP] Rules evaluated:', result.matchedRules.length, 'matched,',
-      result.evaluationTimeMs.toFixed(1) + 'ms');
 
     // Build visible list from rule evaluation
     var newVisibleIds = [];
@@ -611,12 +645,10 @@
         });
       });
       if (hadFilterAction) {
-        console.log('[PGP] Filter matched 0 images for this variant, falling back to variant gallery');
         newVisibleIds = variantFilteredIds.slice();
       }
     }
 
-    console.log('[PGP] Rules: ' + result.matchedRules.length + ' matched, ' + newVisibleIds.length + ' visible');
 
     // Render badges on visible slides
     sorted.forEach(function(item) {

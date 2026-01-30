@@ -73,6 +73,9 @@
     var config = window.PGPConfig || {};
     var selectedOptions = options.selectedOptions || {};
     var selectedValues = Object.values(selectedOptions);
+    if (selectedValues.length === 0 && Array.isArray(options.selectedValues)) {
+      selectedValues = options.selectedValues;
+    }
 
     // Detect device type
     var screenWidth = window.innerWidth;
@@ -225,43 +228,58 @@
       }
     });
 
-    // Capture referrer on first visit (only set on landing page)
     var referrer = document.referrer || "";
+    var UTM_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
     try {
       if (hasUrlUtm) {
-        // Fresh UTM in URL — persist for the session (latest attribution wins)
+        // Fresh UTM in URL — persist to both storages
         var toStore = Object.assign({}, fromUrl);
-        if (referrer) {
-          toStore._referrer = referrer;
-        }
+        if (referrer) toStore._referrer = referrer;
+        toStore._ts = Date.now();
         sessionStorage.setItem("pgp_utm", JSON.stringify(toStore));
+        localStorage.setItem("pgp_utm", JSON.stringify(toStore));
         fromUrl._referrer = referrer;
         return fromUrl;
       }
-      // No UTM in URL — read persisted values
+
+      // No UTM in URL — check sessionStorage (same tab)
       var stored = sessionStorage.getItem("pgp_utm");
       if (stored) {
         var parsed = JSON.parse(stored);
-        // If we have a fresh referrer and no stored one, save it
         if (referrer && !parsed._referrer) {
           parsed._referrer = referrer;
           sessionStorage.setItem("pgp_utm", JSON.stringify(parsed));
         }
         return parsed;
       }
-      // No stored UTM — persist referrer if present (organic/direct first visit)
+
+      // Cross-tab fallback — check localStorage with TTL
+      var shared = localStorage.getItem("pgp_utm");
+      if (shared) {
+        var sharedParsed = JSON.parse(shared);
+        var age = Date.now() - (sharedParsed._ts || 0);
+        if (age < UTM_TTL_MS) {
+          // Valid cross-tab UTM — copy to sessionStorage for this tab
+          sessionStorage.setItem("pgp_utm", shared);
+          if (referrer && !sharedParsed._referrer) {
+            sharedParsed._referrer = referrer;
+          }
+          return sharedParsed;
+        }
+        // Expired — clean up
+        localStorage.removeItem("pgp_utm");
+      }
+
+      // No stored UTM — persist referrer if present
       if (referrer) {
-        var refOnly = { _referrer: referrer };
+        var refOnly = { _referrer: referrer, _ts: Date.now() };
         sessionStorage.setItem("pgp_utm", JSON.stringify(refOnly));
         return refOnly;
       }
       return {};
     } catch (e) {
-      // sessionStorage not available — fall back to URL-only values
-      if (referrer) {
-        fromUrl._referrer = referrer;
-      }
+      if (referrer) fromUrl._referrer = referrer;
       return fromUrl;
     }
   };
