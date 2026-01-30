@@ -5,6 +5,7 @@
  */
 
 import type { Settings, OnboardingState } from "~/types";
+import { checkMetafieldSize } from "./metafieldGuard";
 
 const NAMESPACE = "product_gallery_pro";
 const KEY = "settings";
@@ -212,6 +213,8 @@ export async function updateSettingsInMetafields(
     image_fit: payload.image_fit,
   });
 
+  checkMetafieldSize(value);
+
   const setResponse = await admin.graphql(METAFIELDS_SET_MUTATION, {
     variables: {
       metafields: [
@@ -283,6 +286,7 @@ export async function dismissOnboarding(
     dismissed: true,
     dismissedAt: new Date().toISOString(),
   });
+  checkMetafieldSize(value);
 
   const setResponse = await admin.graphql(METAFIELDS_SET_MUTATION, {
     variables: {

@@ -26,8 +26,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to fetch settings",
+        error: "Failed to fetch settings",
       },
       { status: 500 },
     );
@@ -92,8 +91,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to update settings",
+        error: "Failed to update settings",
       },
       { status: 500 },
     );

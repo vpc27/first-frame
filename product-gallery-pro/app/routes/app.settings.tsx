@@ -73,6 +73,7 @@ export default function SettingsPage() {
                   <input type="hidden" name="autoplay_video" value={form.autoplay_video ? "true" : ""} />
                   <input type="hidden" name="enable_analytics" value={form.enable_analytics ? "true" : ""} />
                   <input type="hidden" name="enable_ai" value={form.enable_ai ? "true" : ""} />
+                  <input type="hidden" name="image_fit" value={form.image_fit} />
 
                   <BlockStack gap="300">
                     <ChoiceList
@@ -127,6 +128,22 @@ export default function SettingsPage() {
                         }
                       />
                     </InlineInputs>
+
+                    <Select
+                      label="Image fit"
+                      options={[
+                        { label: "Auto (recommended)", value: "auto" },
+                        { label: "Contain (show full image)", value: "contain" },
+                        { label: "Cover (fill frame, may crop)", value: "cover" },
+                      ]}
+                      value={form.image_fit}
+                      onChange={(value) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          image_fit: value as Settings["image_fit"],
+                        }))
+                      }
+                    />
 
                     <InlineInputs>
                       <Checkbox

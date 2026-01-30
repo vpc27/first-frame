@@ -1,0 +1,201 @@
+/**
+ * Product Gallery Pro - Enhancer Styles
+ * Amazon-style zoom panel (desktop) + lightbox (mobile)
+ */
+
+/* ── Amazon-style zoom panel ─────────────────────────────── */
+
+/* Lens highlight rectangle on source image */
+.pgp-zoom-lens {
+  position: absolute;
+  border: 2px solid rgba(60, 130, 246, 0.6);
+  background: rgba(60, 130, 246, 0.18);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 50;
+}
+
+.pgp-zoom-lens.pgp-visible {
+  opacity: 1;
+}
+
+/* Zoomed panel that appears to the right of the image */
+.pgp-zoom-panel {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 12px;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #fff no-repeat;
+  z-index: 100;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pgp-zoom-panel.pgp-visible {
+  opacity: 1;
+}
+
+/* ── Lightbox (mobile fullscreen) ────────────────────────── */
+
+.pgp-lightbox {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.pgp-lightbox.pgp-open {
+  opacity: 1;
+}
+
+.pgp-lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 6px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+/* Close button — position:fixed so it NEVER scrolls or scales away */
+.pgp-lightbox-close {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000002;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+
+.pgp-lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.pgp-lightbox-close svg {
+  width: 20px;
+  height: 20px;
+  stroke: #fff;
+  stroke-width: 2.5;
+  fill: none;
+  pointer-events: none;
+}
+
+/* Hint text */
+.pgp-lightbox-hint {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+  z-index: 1000002;
+  text-align: center;
+}
+
+/* ── Zoom cursor / icon ──────────────────────────────────── */
+
+.pgp-zoom-cursor {
+  cursor: crosshair !important;
+}
+
+.pgp-zoom-icon {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.pgp-zoom-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: #fff;
+  stroke-width: 2;
+  fill: none;
+}
+
+.pgp-slide:hover .pgp-zoom-icon,
+.pgp-stack-item:hover .pgp-zoom-icon,
+.pgp-grid-item:hover .pgp-zoom-icon {
+  opacity: 1;
+}
+
+/* ── Video lightbox ──────────────────────────────────────── */
+
+.pgp-video-lightbox {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.pgp-video-lightbox.pgp-open {
+  opacity: 1;
+}
+
+.pgp-video-lightbox-content {
+  position: relative;
+  width: 90vw;
+  max-width: 1200px;
+  aspect-ratio: 16 / 9;
+}
+
+.pgp-video-lightbox-content video,
+.pgp-video-lightbox-content iframe {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: none;
+  border-radius: 8px;
+}
+
+/* ── Touch devices ───────────────────────────────────────── */
+
+@media (hover: none) {
+  .pgp-zoom-icon {
+    opacity: 1;
+  }
+}
